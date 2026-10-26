@@ -858,7 +858,7 @@ textarea:focus-visible {
 .chat-room-title h1 {
   font-size: 25px;
   font-weight: 600;
-  color: --;
+  color: #d5ff67;
 }
 .chat-room-title span {
   color: #7d8578;
@@ -919,9 +919,6 @@ textarea:focus-visible {
   background: #272d25;
 }
 .room-menu .danger-item {
-  color: #ff9387;
-}
-.chat-room-menu .danger-item {
   color: #ff9387;
 }
 .conversation {
@@ -1651,18 +1648,6 @@ textarea:focus-visible {
 .close-room-actions button {
   min-height: 42px;
 }
-.close-room-actions .end-room-confirm-button {
-  min-width: 148px;
-  min-height: 44px;
-  border: 1px solid #ffb2a7;
-  background: #ff9387;
-  color: #21110f;
-  font-weight: 700;
-  opacity: 1;
-}
-.close-room-actions .end-room-confirm-button:hover {
-  background: #ffb0a5;
-}
 .people-section {
   margin-top: 22px;
 }
@@ -1816,13 +1801,13 @@ textarea:focus-visible {
   box-shadow: 0 14px 34px #0008;
   animation: rise-in 250ms ease-out both;
 }
-.welcome-toast .toast-avatar {
+.welcome-toast img {
   width: 31px;
   height: 31px;
   flex: 0 0 31px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
+  border-radius: 8px;
+  background: var(--lime);
+  object-fit: contain;
 }
 .welcome-toast span {
   display: grid;
@@ -1833,12 +1818,10 @@ textarea:focus-visible {
   color: #edf0e8;
   font-size: 13px;
   font-weight: 650;
-  overflow-wrap: anywhere;
 }
 .welcome-toast small {
   color: #adb5a5;
   font-size: 11px;
-  overflow-wrap: anywhere;
 }
 
 .invitation-layout {
@@ -2493,9 +2476,6 @@ textarea:focus-visible {
   .welcome-toast {
     top: 88px;
     right: 12px;
-    width: min(360px, calc(100vw - 24px));
-    padding: 10px 12px;
-    gap: 9px;
   }
 }
 @media (max-width: 380px) {
@@ -2539,7 +2519,7 @@ textarea:focus-visible {
   align-items: flex-end;
   gap: 10px;
   max-width: none;
-  margin-bottom: 36px;
+  margin-bottom: 16px;
   animation: chat-message-in 220ms ease-out both;
 }
 .message-row.grouped-message {
@@ -2609,117 +2589,14 @@ textarea:focus-visible {
   top: 137px;
 }
 .connection-alert {
-  position: fixed;
-  z-index: 40;
-  top: 76px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(420px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px);
+  flex: 0 0 auto;
   margin: 0;
-  padding: 11px 12px 11px 14px;
-  border: 1px solid #765329;
-  border-radius: 12px;
+  padding: 9px 2.4%;
+  border-bottom: 1px solid #765329;
   background: #292116;
   color: #f0c787;
   font-size: 12px;
   line-height: 1.45;
-  box-shadow: 0 14px 34px #0008;
-  overflow-wrap: anywhere;
-}
-.connection-alert > span,
-.error-popup > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.connection-alert button,
-.error-popup-dismiss {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  color: #d5b987;
-  background: transparent;
-  cursor: pointer;
-}
-.connection-alert button:hover,
-.error-popup-dismiss:hover {
-  color: #fff0d5;
-  background: #ffffff12;
-}
-.error-popup {
-  position: fixed;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(440px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px);
-  margin: 0;
-  padding: 11px 12px 11px 14px;
-  border: 1px solid #613b36;
-  border-radius: 12px;
-  background: #2b1b18;
-  color: #ffb7a8;
-  box-shadow: 0 14px 34px #0008;
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.flow-error-popup,
-.chat-error-popup {
-  top: 76px;
-  right: 20px;
-}
-.send-failure {
-  position: fixed;
-  z-index: 55;
-  right: 20px;
-  bottom: calc(106px + env(safe-area-inset-bottom));
-  margin: 0;
-}
-.send-failure-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 3px;
-}
-.send-retry-button {
-  min-height: 32px;
-  flex: 0 0 auto;
-  padding: 0 10px;
-  color: var(--lime);
-  font-size: 12px;
-}
-.send-retry-button:hover {
-  background: #d5ff6715;
-}
-.send-failure .error-popup-dismiss {
-  color: #ffb7a8;
-}
-@media (max-width: 760px) {
-  .connection-alert,
-  .flow-error-popup,
-  .chat-error-popup {
-    top: 76px;
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-width: none;
-  }
-  .send-failure {
-    left: 12px;
-    right: 12px;
-    bottom: calc(120px + env(safe-area-inset-bottom));
-    width: auto;
-    max-width: none;
-  }
 }
 
 @media (max-width: 760px) {
@@ -2737,6 +2614,20 @@ textarea:focus-visible {
     max-width: min(84%, 560px);
   }
 
+  @media (max-width: 480px) {
+    .message-line {
+      width: 100%;
+    }
+    .message-row {
+      margin-bottom: 12px;
+    }
+    .message-content {
+      max-width: min(84%, 480px);
+    }
+    .composer-area {
+      padding-inline: 12px;
+    }
+  }
   .chat-brand-mark {
     width: 27px;
     height: 27px;
@@ -2748,21 +2639,6 @@ textarea:focus-visible {
   }
   .connection-alert {
     padding-inline: 14px;
-  }
-}
-
-@media (max-width: 480px) {
-  .message-line {
-    width: 100%;
-  }
-  .message-row {
-    margin-bottom: 12px;
-  }
-  .message-content {
-    max-width: min(84%, 480px);
-  }
-  .composer-area {
-    padding-inline: 12px;
   }
 }
 
@@ -2850,9 +2726,6 @@ textarea:focus-visible {
 }
 .send-retry-button:hover {
   background: #d5ff6715;
-}
-.error-popup.send-failure {
-  margin: 0;
 }
 .emoji-picker {
   z-index: 60;
