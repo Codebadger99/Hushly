@@ -14,7 +14,7 @@ import { RateLimitService } from '../security/rate-limit.service';
 
 const TOO_MANY = { error: 'Too many requests, slow down' };
 
-
+@WebSocketGateway()
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -34,13 +34,43 @@ export class ChatGateway
     });
   }
 
+  private publishRoomState(code: string) {
+    const presence = this.roomsService.getRoomPresence(code);
+    if (!presence) return;
+    this.server.to(code).emit('room:presence', presence);
+
+    const ownerRoster = this.roomsService.getOwnerRoster(code);
+    if (ownerRoster) {
+      this.server.to(ownerRoster.ownerSocketId).emit('room:participants', {
+        participants: ownerRoster.participants,
+        blockedParticipants: ownerRoster.blockedParticipants,
+      });
+    }
+  }
+
+  @SubscribeMessage('room:state:request')
+  handleRoomStateRequest(@ConnectedSocket() client: Socket) {
+    const code = this.roomsService.getParticipantRoomCode(client.id);
+    if (!code) return { error: 'Room not found' };
+    this.publishRoomState(code);
+    return { ok: true };
+  }
+
   handleConnection(client: Socket) {
     console.log(`Connected: ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
     console.log(`Disconnected: ${client.id}`);
-    this.roomsService.handleDisconnect(client.id);
+    const result = this.roomsService.handleDisconnect(client.id);
+    if (!result) return;
+    if (result.stoppedTyping) {
+      this.server.to(result.roomCode).emit('room:typing', {
+        ...result.stoppedTyping,
+        isTyping: false,
+      });
+    }
+    this.publishRoomState(result.roomCode);
   }
 
    private ip(client: Socket): string {
@@ -55,39 +85,67 @@ export class ChatGateway
   }
   
   @SubscribeMessage('room:create')
-  handleCreate(
-    @MessageBody() data: { name: string },
+  async handleCreate(
+    @MessageBody() data: { name: string; clientIdentity: string },
     @ConnectedSocket() client: Socket,
   ) {
     if (!this.rateLimit.allow(`create:${this.ip(client)}`, 5, 60_000)) return TOO_MANY;
 
-    const result = this.roomsService.createRoom(data?.name, client.id);
-   if (result.roomCode) client.join(result.roomCode);
-    return result;
+   const result = this.roomsService.createRoom(data?.name, client.id, data?.clientIdentity);
+   if (result.roomCode) {
+     await client.join(result.roomCode);
+     this.publishRoomState(result.roomCode);
+   }
+   return result;
   }
 
   @SubscribeMessage('room:join')
-  handleJoin(
-    @MessageBody() data: { code: string },
+  async handleJoin(
+    @MessageBody() data: { code: string; clientIdentity: string },
     @ConnectedSocket() client: Socket,
   ) {
     // Limits code guessing
     if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000)) return TOO_MANY;
 
-    const result = this.roomsService.joinRoom(data?.code, client.id);
-   if (result.roomCode) client.join(result.roomCode);
+   const result = this.roomsService.joinRoom(data?.code, client.id, data?.clientIdentity);
+   if (result.roomCode) {
+     await client.join(result.roomCode);
+     this.publishRoomState(result.roomCode);
+     client.to(result.roomCode).emit('room:notice', {
+       displayName: result.displayName,
+     });
+   }
     return result;
   }
 
+  @SubscribeMessage('room:preview')
+  handlePreview(
+    @MessageBody() data: { code: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!this.rateLimit.allow(`preview:${this.ip(client)}`, 10, 60_000)) {
+      return TOO_MANY;
+    }
+    return this.roomsService.previewRoom(data?.code);
+  }
+
   @SubscribeMessage('room:reconnect')
-  handleReconnect(
-    @MessageBody() data: { code: string; token: string },
+  async handleReconnect(
+    @MessageBody() data: { code: string; token: string; clientIdentity: string },
     @ConnectedSocket() client: Socket,
   ) {
     if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000)) return TOO_MANY;
 
-    const result = this.roomsService.reconnect(data?.code, data?.token, client.id);
-   if (result.roomCode) client.join(result.roomCode);
+   const result = this.roomsService.reconnect(
+     data?.code,
+     data?.token,
+     client.id,
+     data?.clientIdentity,
+   );
+   if (result.roomCode) {
+     await client.join(result.roomCode);
+     this.publishRoomState(result.roomCode);
+   }
     return result;
   }
 
@@ -98,6 +156,7 @@ export class ChatGateway
   ) {
     if (!this.rateLimit.allow(`msg:${client.id}`, 20, 10_000)) return TOO_MANY;
 
+    this.publishTypingStop(client);
     const result = this.roomsService.sendMessage(data?.code, client.id, data?.body);
     if ('error' in result) return result;
 
@@ -105,10 +164,107 @@ export class ChatGateway
     return { ok: true };
   }
 
+  @SubscribeMessage('message:edit')
+  handleEditMessage(
+    @MessageBody() data: { messageId: string; body: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!this.rateLimit.allow(`msg:${client.id}`, 20, 10_000)) return TOO_MANY;
+    const result = this.roomsService.editMessage(
+      client.id,
+      data?.messageId,
+      data?.body,
+    );
+    if ('error' in result) return result;
+
+    this.server.to(result.roomCode).emit('message:updated', result.message);
+    return { ok: true };
+  }
+
+  @SubscribeMessage('message:delete')
+  handleDeleteMessage(
+    @MessageBody() data: { messageId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!this.rateLimit.allow(`msg:${client.id}`, 20, 10_000)) return TOO_MANY;
+    const result = this.roomsService.deleteMessage(client.id, data?.messageId);
+    if ('error' in result) return result;
+
+    this.server.to(result.roomCode).emit('message:deleted', {
+      messageId: result.messageId,
+    });
+    return { ok: true };
+  }
+
+  @SubscribeMessage('typing:update')
+  handleTyping(
+    @MessageBody() data: { isTyping: boolean },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (typeof data?.isTyping !== 'boolean') return { error: 'Invalid typing state' };
+    if (!this.rateLimit.allow(`typing:${client.id}`, 30, 10_000)) return TOO_MANY;
+
+    const result = this.roomsService.updateTyping(client.id, data.isTyping);
+    if (!result || 'error' in result) return result ?? { ok: true };
+    client.to(result.roomCode).emit('room:typing', {
+      participantId: result.participantId,
+      displayName: result.displayName,
+      isTyping: result.isTyping,
+    });
+    return { ok: true };
+  }
+
+  private publishTypingStop(client: Socket) {
+    const result = this.roomsService.updateTyping(client.id, false);
+    if (!result || 'error' in result) return;
+    client.to(result.roomCode).emit('room:typing', {
+      participantId: result.participantId,
+      displayName: result.displayName,
+      isTyping: false,
+    });
+  }
+
+  @SubscribeMessage('room:participant:block')
+  handleBlockParticipant(
+    @MessageBody() data: { participantId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const result = this.roomsService.blockParticipant(client.id, data?.participantId);
+    if ('error' in result) return result;
+
+    result.stoppedTyping.forEach((participant) => {
+      this.server.to(result.roomCode).emit('room:typing', {
+        ...participant,
+        isTyping: false,
+      });
+    });
+    result.disconnectedSocketIds.forEach((socketId) => {
+      this.server.to(socketId).emit('room:blocked');
+      this.server.in(socketId).disconnectSockets(true);
+    });
+    this.publishRoomState(result.roomCode);
+    return { ok: true };
+  }
+
+  @SubscribeMessage('room:participant:unblock')
+  handleUnblockParticipant(
+    @MessageBody() data: { blockedId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const result = this.roomsService.unblockParticipant(client.id, data?.blockedId);
+    if ('error' in result) return result;
+    this.publishRoomState(result.roomCode);
+    return { ok: true };
+  }
+
   @SubscribeMessage('room:leave')
-  handleLeave(@ConnectedSocket() client: Socket) {
+  async handleLeave(@ConnectedSocket() client: Socket) {
+    this.publishTypingStop(client);
     const result = this.roomsService.leaveRoom(client.id);
-    if ('roomCode' in result && result.roomCode) client.leave(result.roomCode);
+    if ('roomCode' in result && result.roomCode) {
+      await client.leave(result.roomCode);
+      this.publishRoomState(result.roomCode);
+    }
     return result;
   }
 

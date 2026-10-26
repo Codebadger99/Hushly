@@ -4,7 +4,7 @@ import { randomInt, randomUUID } from 'crypto';
 import { IdentityService } from '../identity/identity.service';
 import { TokenService } from '../identity/token.service';
 import { validateMessage, validateRoomName } from '../security/validators';
-import { Message, Participant, Room } from './room.types';
+import { BlockedParticipant, Message, Participant, Room } from './room.types';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 8;
@@ -72,10 +72,23 @@ export class RoomsService {
     return n;
   }
 
+  private clientIdentityHash(clientIdentity: unknown): string | null {
+    if (
+      typeof clientIdentity !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        clientIdentity,
+      )
+    ) {
+      return null;
+    }
+    return this.tokens.hash(clientIdentity);
+  }
+
   // ---------- timers ----------
 
   private startOwnerGrace(room: Room) {
     if (room.ownerGraceTimer) clearTimeout(room.ownerGraceTimer);
+    room.ownerGraceEndsAt = Date.now() + this.ownerGraceMs;
     room.ownerGraceTimer = setTimeout(() => {
       // Re-check: room must still be this room, and the owner still gone
       if (this.rooms.get(room.code) !== room) return;
@@ -97,6 +110,7 @@ export class RoomsService {
     if (room.ownerGraceTimer) clearTimeout(room.ownerGraceTimer);
     if (room.inactivityTimer) clearTimeout(room.inactivityTimer);
     room.ownerGraceTimer = undefined;
+    room.ownerGraceEndsAt = undefined;
     room.inactivityTimer = undefined;
   }
 
@@ -117,10 +131,12 @@ export class RoomsService {
 
   // ---------- public actions ----------
 
-  createRoom(name: string, socketId: string) {
+  createRoom(name: string, socketId: string, clientIdentity: unknown) {
     const nameError = validateRoomName(name);
     if (nameError) return { error: nameError };
     if (this.socketIndex.has(socketId)) return { error: 'Already in a room' };
+    const identityHash = this.clientIdentityHash(clientIdentity);
+    if (!identityHash) return { error: 'Could not verify this browser. Please refresh and try again.' };
 
     const code = this.generateUniqueCode();
     const token = this.tokens.generate();
@@ -129,6 +145,7 @@ export class RoomsService {
       id: randomUUID(),
       displayName: this.identity.generateName(new Set()),
       tokenHash: this.tokens.hash(token),
+      clientIdentityHash: identityHash,
       socketId,
       isOwner: true,
     };
@@ -138,6 +155,8 @@ export class RoomsService {
       name: name.trim(),
       ownerId: owner.id,
       participants: new Map([[owner.id, owner]]),
+      blockedParticipants: new Map(),
+      typingParticipantIds: new Set(),
       messages: [],
     };
 
@@ -151,19 +170,26 @@ export class RoomsService {
       displayName: owner.displayName,
       token,
       messages: [] as Message[],
+      connectedCount: 1,
     };
   }
 
-  joinRoom(code: string, socketId: string) {
+  joinRoom(code: string, socketId: string, clientIdentity: unknown) {
     const room = this.findRoom(code);
     if (!room) return { error: NOT_FOUND };
     if (this.socketIndex.has(socketId)) return { error: 'Already in a room' };
+    const identityHash = this.clientIdentityHash(clientIdentity);
+    if (!identityHash) return { error: 'Could not verify this browser. Please refresh and try again.' };
+    if (room.blockedParticipants.has(identityHash)) {
+      return { error: 'This browser has been blocked from this room. Ask the owner to unblock you.' };
+    }
 
     const token = this.tokens.generate();
     const participant: Participant = {
       id: randomUUID(),
       displayName: this.identity.generateName(this.usedNames(room)),
       tokenHash: this.tokens.hash(token),
+      clientIdentityHash: identityHash,
       socketId,
       isOwner: false,
     };
@@ -184,19 +210,33 @@ export class RoomsService {
       displayName: participant.displayName,
       token,
       messages: room.messages,
+      connectedCount: this.connectedCount(room),
     };
   }
 
-  reconnect(code: string, token: string, socketId: string) {
+  previewRoom(code: string) {
+    const room = this.findRoom(code);
+    if (!room) return { error: NOT_FOUND };
+    return { roomName: room.name };
+  }
+
+  reconnect(code: string, token: string, socketId: string, clientIdentity: unknown) {
     const room = this.findRoom(code);
     if (!room || typeof token !== 'string') return { error: NOT_FOUND };
+    const identityHash = this.clientIdentityHash(clientIdentity);
+    if (!identityHash) return { error: NOT_FOUND };
 
     const candidate = this.tokens.hash(token);
     let participant: Participant | undefined;
     for (const p of room.participants.values()) {
       if (this.tokens.matches(p.tokenHash, candidate)) participant = p;
     }
-    if (!participant) return { error: NOT_FOUND };
+    if (!participant || participant.clientIdentityHash !== identityHash) {
+      return { error: NOT_FOUND };
+    }
+    if (room.blockedParticipants.has(identityHash)) {
+      return { error: 'This browser has been blocked from this room. Ask the owner to unblock you.' };
+    }
 
     // If an old connection was still attached, detach it
     if (participant.socketId && participant.socketId !== socketId) {
@@ -208,6 +248,7 @@ export class RoomsService {
     if (participant.isOwner && room.ownerGraceTimer) {
       clearTimeout(room.ownerGraceTimer);
       room.ownerGraceTimer = undefined;
+      room.ownerGraceEndsAt = undefined;
     }
     if (room.inactivityTimer) {
       clearTimeout(room.inactivityTimer);
@@ -221,6 +262,106 @@ export class RoomsService {
       displayName: participant.displayName,
       isOwner: participant.isOwner,
       messages: room.messages,
+      connectedCount: this.connectedCount(room),
+    };
+  }
+
+  getRoomPresence(code: string) {
+    const room = this.findRoom(code);
+    if (!room) return null;
+    return {
+      connectedCount: this.connectedCount(room),
+      ownerGraceEndsAt: room.ownerGraceEndsAt ?? null,
+    };
+  }
+
+  getParticipantRoomCode(socketId: string) {
+    return this.socketIndex.get(socketId);
+  }
+
+  getOwnerRoster(code: string) {
+    const room = this.findRoom(code);
+    if (!room) return null;
+    const owner = room.participants.get(room.ownerId);
+    if (!owner?.socketId) return null;
+    return {
+      ownerSocketId: owner.socketId,
+      participants: [...room.participants.values()].map((participant) => ({
+        id: participant.id,
+        displayName: participant.displayName,
+        isOwner: participant.isOwner,
+        connected: participant.socketId !== null,
+      })),
+      blockedParticipants: [...room.blockedParticipants.values()],
+    };
+  }
+
+  blockParticipant(ownerSocketId: string, participantId: string) {
+    const code = this.socketIndex.get(ownerSocketId);
+    const room = code ? this.rooms.get(code) : undefined;
+    const owner = room && this.findParticipantBySocket(room, ownerSocketId);
+    if (!room || !owner?.isOwner) return { error: 'Not allowed' };
+
+    const target = room.participants.get(participantId);
+    if (!target || target.isOwner) return { error: 'Participant not found' };
+    if (target.clientIdentityHash === owner.clientIdentityHash) {
+      return { error: 'You cannot block your own browser from this room' };
+    }
+
+    const blocked: BlockedParticipant = {
+      id: randomUUID(),
+      displayName: target.displayName,
+    };
+    room.blockedParticipants.set(target.clientIdentityHash, blocked);
+
+    const disconnectedSocketIds: string[] = [];
+    const stoppedTyping: Array<{ participantId: string; displayName: string }> = [];
+    for (const [id, participant] of room.participants) {
+      if (participant.clientIdentityHash !== target.clientIdentityHash) continue;
+      if (participant.socketId) {
+        this.socketIndex.delete(participant.socketId);
+        disconnectedSocketIds.push(participant.socketId);
+      }
+      if (room.typingParticipantIds.delete(id)) {
+        stoppedTyping.push({ participantId: id, displayName: participant.displayName });
+      }
+      room.participants.delete(id);
+    }
+
+    if (this.connectedCount(room) === 0) this.startInactivityTimer(room);
+    return { ok: true, roomCode: room.code, blocked, disconnectedSocketIds, stoppedTyping };
+  }
+
+  unblockParticipant(ownerSocketId: string, blockedId: string) {
+    const code = this.socketIndex.get(ownerSocketId);
+    const room = code ? this.rooms.get(code) : undefined;
+    const owner = room && this.findParticipantBySocket(room, ownerSocketId);
+    if (!room || !owner?.isOwner) return { error: 'Not allowed' };
+
+    for (const [identityHash, blocked] of room.blockedParticipants) {
+      if (blocked.id === blockedId) {
+        room.blockedParticipants.delete(identityHash);
+        return { ok: true, roomCode: room.code };
+      }
+    }
+    return { error: 'Blocked participant not found' };
+  }
+
+  updateTyping(socketId: string, isTyping: boolean) {
+    const code = this.socketIndex.get(socketId);
+    const room = code ? this.rooms.get(code) : undefined;
+    const participant = room && this.findParticipantBySocket(room, socketId);
+    if (!room || !participant) return { error: NOT_FOUND };
+
+    const wasTyping = room.typingParticipantIds.has(participant.id);
+    if (wasTyping === isTyping) return null;
+    if (isTyping) room.typingParticipantIds.add(participant.id);
+    else room.typingParticipantIds.delete(participant.id);
+    return {
+      roomCode: room.code,
+      participantId: participant.id,
+      displayName: participant.displayName,
+      isTyping,
     };
   }
 
@@ -234,6 +375,7 @@ export class RoomsService {
 
     const error = validateMessage(body);
     if (error) return { error };
+    room.typingParticipantIds.delete(sender.id);
 
     const message: Message = {
       id: randomUUID(),
@@ -247,6 +389,43 @@ export class RoomsService {
     if (room.messages.length > MAX_MESSAGES_PER_ROOM) room.messages.shift();
 
     return { roomCode: room.code, message };
+  }
+
+  editMessage(socketId: string, messageId: string, body: string) {
+    const code = this.socketIndex.get(socketId);
+    const room = code ? this.rooms.get(code) : undefined;
+    const participant = room && this.findParticipantBySocket(room, socketId);
+    if (!room || !participant) return { error: NOT_FOUND };
+
+    const error = validateMessage(body);
+    if (error) return { error };
+    const index = room.messages.findIndex((message) => message.id === messageId);
+    if (index === -1) return { error: 'Message not found' };
+    const message = room.messages[index];
+    if (message.senderId !== participant.id && !participant.isOwner) {
+      return { error: 'Not allowed' };
+    }
+
+    const editedMessage = { ...message, body: body.trim(), edited: true };
+    room.messages[index] = editedMessage;
+    return { roomCode: room.code, message: editedMessage };
+  }
+
+  deleteMessage(socketId: string, messageId: string) {
+    const code = this.socketIndex.get(socketId);
+    const room = code ? this.rooms.get(code) : undefined;
+    const participant = room && this.findParticipantBySocket(room, socketId);
+    if (!room || !participant) return { error: NOT_FOUND };
+
+    const index = room.messages.findIndex((message) => message.id === messageId);
+    if (index === -1) return { error: 'Message not found' };
+    const message = room.messages[index];
+    if (message.senderId !== participant.id && !participant.isOwner) {
+      return { error: 'Not allowed' };
+    }
+
+    room.messages.splice(index, 1);
+    return { roomCode: room.code, messageId };
   }
 
   // Deliberate leave
@@ -268,6 +447,7 @@ export class RoomsService {
     this.socketIndex.delete(socketId);
     participant.socketId = null;
     participant.tokenHash = ''; // their token no longer works
+    room.typingParticipantIds.delete(participant.id);
 
     if (this.connectedCount(room) === 0) this.startInactivityTimer(room);
     return { ok: true, roomCode: room.code };
@@ -289,17 +469,24 @@ export class RoomsService {
   // Unexpected connection loss (tab closed, internet dropped)
   handleDisconnect(socketId: string) {
     const code = this.socketIndex.get(socketId);
-    if (!code) return;
+    if (!code) return null;
     this.socketIndex.delete(socketId);
 
     const room = this.rooms.get(code);
-    if (!room) return;
+    if (!room) return null;
 
     const participant = this.findParticipantBySocket(room, socketId);
-    if (!participant) return;
+    if (!participant) return null;
     participant.socketId = null;
+    const stoppedTyping = room.typingParticipantIds.delete(participant.id);
 
     if (participant.isOwner) this.startOwnerGrace(room);
     if (this.connectedCount(room) === 0) this.startInactivityTimer(room);
+    return {
+      roomCode: room.code,
+      stoppedTyping: stoppedTyping
+        ? { participantId: participant.id, displayName: participant.displayName }
+        : null,
+    };
   }
 }

@@ -1,0 +1,88 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+:root {
+  font-family: "Geist Variable", Geist, Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #edeee8;
+  background: #0d100d;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --background: #0d100d;
+  --foreground: #edeee8;
+  --card: #171b17;
+  --card-foreground: #edeee8;
+  --popover: #191d18;
+  --popover-foreground: #edeee8;
+  --primary: #d5ff67;
+  --primary-foreground: #151a0d;
+  --secondary: #20251f;
+  --secondary-foreground: #edeee8;
+  --muted: #20251f;
+  --muted-foreground: #92998d;
+  --accent: #20251f;
+  --accent-foreground: #edeee8;
+  --destructive: #ff9387;
+  --border: #2b3229;
+  --input: #30382d;
+  --ring: #d5ff67;
+  --radius: 0.625rem;
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", Geist, Inter, ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+}
+
+#root {
+  min-height: 100svh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #d5ff67;
+  outline-offset: 3px;
+}
