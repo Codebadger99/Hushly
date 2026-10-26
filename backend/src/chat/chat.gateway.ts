@@ -28,8 +28,8 @@ export class ChatGateway
 
   afterInit() {
     // When a room is destroyed: tell everyone, then disconnect them
-    this.roomsService.setDestroyHandler((code) => {
-      this.server.to(code).emit('room:destroyed');
+    this.roomsService.setDestroyHandler((code, reason) => {
+      this.server.to(code).emit('room:destroyed', { reason });
       // Let room notifications and Socket.IO acknowledgements flush before closing sockets.
       setTimeout(() => this.server.in(code).disconnectSockets(true), 0);
     });
@@ -98,7 +98,7 @@ export class ChatGateway
     if (!this.rateLimit.allow(`create:${this.ip(client)}`, 5, 60_000)) return TOO_MANY;
 
    const result = this.roomsService.createRoom(data?.name, client.id, data?.clientIdentity);
-   if (result.roomCode) {
+   if (typeof result.roomCode === 'string') {
      await client.join(result.roomCode);
      this.publishRoomState(result.roomCode);
    }
@@ -114,7 +114,7 @@ export class ChatGateway
     if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000)) return TOO_MANY;
 
    const result = this.roomsService.joinRoom(data?.code, client.id, data?.clientIdentity);
-   if (result.roomCode) {
+   if (typeof result.roomCode === 'string') {
      await client.join(result.roomCode);
      this.publishRoomState(result.roomCode);
      client.to(result.roomCode).emit('room:notice', {
@@ -135,6 +135,17 @@ export class ChatGateway
     return this.roomsService.previewRoom(data?.code);
   }
 
+  @SubscribeMessage('room:invite:preview')
+  handleInvitePreview(
+    @MessageBody() data: { token: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!this.rateLimit.allow(`preview:${this.ip(client)}`, 10, 60_000)) {
+      return TOO_MANY;
+    }
+    return this.roomsService.previewInvite(data?.token);
+  }
+
   @SubscribeMessage('room:reconnect')
   async handleReconnect(
     @MessageBody() data: { code: string; token: string; clientIdentity: string },
@@ -148,7 +159,7 @@ export class ChatGateway
      client.id,
      data?.clientIdentity,
    );
-   if (result.roomCode) {
+   if ('roomCode' in result && typeof result.roomCode === 'string') {
      await client.join(result.roomCode);
      this.publishRoomState(result.roomCode);
    }

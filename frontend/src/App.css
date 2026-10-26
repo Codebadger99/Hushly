@@ -1743,13 +1743,14 @@ textarea:focus-visible {
 .owner-grace-notice {
   position: fixed;
   z-index: 30;
+  top: 76px;
   right: 20px;
-  bottom: 120px;
+  bottom: auto;
   display: flex;
   align-items: flex-start;
   gap: 10px;
   width: max-content;
-  max-width: min(390px, calc(100vw - 24px));
+  max-width: min(390px, calc(100vw - 32px));
   margin: 0;
   padding: 12px 14px;
   border: 1px solid #765329;
@@ -1769,6 +1770,8 @@ textarea:focus-visible {
 .owner-grace-notice > span {
   display: grid;
   gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .owner-grace-notice strong {
   color: #ffe1ae;
@@ -1793,7 +1796,9 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 11px;
-  max-width: min(360px, calc(100vw - 32px));
+  width: min(360px, calc(100vw - 32px));
+  min-width: 0;
+  max-width: calc(100vw - 32px);
   padding: 12px 15px;
   border: 1px solid #3b4930;
   border-radius: 12px;
@@ -1801,27 +1806,31 @@ textarea:focus-visible {
   box-shadow: 0 14px 34px #0008;
   animation: rise-in 250ms ease-out both;
 }
-.welcome-toast img {
+.welcome-toast .toast-avatar {
   width: 31px;
   height: 31px;
   flex: 0 0 31px;
-  border-radius: 8px;
-  background: var(--lime);
-  object-fit: contain;
-}
-.welcome-toast span {
   display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+.welcome-toast-copy {
+  display: grid;
+  flex: 1 1 auto;
   gap: 3px;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .welcome-toast strong {
   color: #edf0e8;
   font-size: 13px;
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 .welcome-toast small {
   color: #adb5a5;
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .invitation-layout {
@@ -2427,8 +2436,12 @@ textarea:focus-visible {
     padding-inline: 7px;
   }
   .owner-grace-notice {
+    top: 88px;
+    left: auto;
     right: 12px;
-    bottom: calc(124px + env(safe-area-inset-bottom));
+    bottom: auto;
+    width: min(390px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
   }
 }
 @media (max-width: 760px) {
@@ -2475,7 +2488,10 @@ textarea:focus-visible {
   }
   .welcome-toast {
     top: 88px;
+    left: auto;
     right: 12px;
+    width: min(360px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
   }
 }
 @media (max-width: 380px) {
@@ -2589,17 +2605,87 @@ textarea:focus-visible {
   top: 137px;
 }
 .connection-alert {
-  flex: 0 0 auto;
+  position: fixed;
+  z-index: 40;
+  top: 76px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  width: min(420px, calc(100vw - 32px));
   margin: 0;
-  padding: 9px 2.4%;
-  border-bottom: 1px solid #765329;
+  padding: 11px 14px;
+  border: 1px solid #765329;
+  border-radius: 12px;
   background: #292116;
   color: #f0c787;
   font-size: 12px;
   line-height: 1.45;
+  box-shadow: 0 14px 34px #0008;
+  overflow-wrap: anywhere;
+}
+.error-popup {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(440px, calc(100vw - 32px));
+  margin: 0;
+  padding: 11px 12px 11px 14px;
+  border: 1px solid #613b36;
+  border-radius: 12px;
+  background: #2b1b18;
+  color: #ffb7a8;
+  box-shadow: 0 14px 34px #0008;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.error-popup > span,
+.connection-alert > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.flow-error-popup,
+.chat-error-popup,
+.room-closed-popup {
+  top: 76px;
+  right: 20px;
+}
+.error-popup-dismiss {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #ffb7a8;
+  background: transparent;
+  cursor: pointer;
+}
+.error-popup-dismiss:hover {
+  background: #ffffff12;
 }
 
 @media (max-width: 760px) {
+  .connection-alert,
+  .flow-error-popup,
+  .chat-error-popup,
+  .room-closed-popup {
+    top: 76px;
+    left: auto;
+    right: 12px;
+    width: min(440px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+  }
+  .owner-grace-notice {
+    top: 88px;
+    left: auto;
+    right: 12px;
+    width: min(390px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+  }
   .conversation {
     padding: 18px 14px;
   }
@@ -2635,10 +2721,10 @@ textarea:focus-visible {
   }
   .join-notice-toast {
     top: 148px;
+    left: auto;
     right: 12px;
-  }
-  .connection-alert {
-    padding-inline: 14px;
+    width: min(360px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
   }
 }
 
@@ -2908,6 +2994,10 @@ textarea:focus-visible {
   }
 }
 @media (max-width: 760px) {
+  .desktop-room-ticket {
+    display: none !important;
+  }
+
   .composer {
     min-height: 56px;
     padding: 6px 8px 6px 10px;

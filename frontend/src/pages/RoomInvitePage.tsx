@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, Copy, Ticket, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SiteChrome } from '@/components/site/SiteChrome'
-import type { RoomNotice } from '@/types/hushly'
+import { firstNameInitial, type RoomNotice } from '@/types/hushly'
 import Logo from '../../public/Spirit seal.png'
 
 type RoomInvitePageProps = {
@@ -70,8 +70,10 @@ export function RoomInvitePage({
     <SiteChrome home={false} onHome={onHome}>
       {isOwner && joinNotice && (
         <div className="welcome-toast join-notice-toast" role="status" aria-live="polite">
-          <img src={Logo} alt="" />
-          <span>
+          <span className="profile-pill toast-avatar" aria-hidden="true">
+            {firstNameInitial(joinNotice.displayName)}
+          </span>
+          <span className="welcome-toast-copy">
             <strong>{joinNotice.displayName} joined the room</strong>
             <small>Say hello and make them feel welcome.</small>
           </span>
@@ -148,7 +150,7 @@ export function RoomInvitePage({
                 </Button>
               </div>
               <p className="share-hint">
-                The link includes the invite automatically. Guests can join without entering a code.
+                This private link does not contain the room code. Share the code separately so guests can join.
               </p>
 
               <label className="share-label room-code-label" htmlFor="share-room-code">
@@ -156,7 +158,7 @@ export function RoomInvitePage({
               </label>
               <div className="share-code-row">
                 <span className="share-code-value" id="share-room-code">
-                  <Ticket size={17} />
+                  <Ticket className="desktop-room-ticket" size={17} />
                   {roomCode}
                 </span>
                 <Button className="share-action" type="button" variant="ghost" onClick={onCopyCode}>

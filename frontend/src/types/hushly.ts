@@ -19,6 +19,7 @@ export type Session = {
   token: string
   messages: Message[]
   isOwner?: boolean
+  inviteToken?: string
 }
 
 export type RoomParticipant = {
@@ -61,6 +62,9 @@ export const initials = (name: string) =>
     .join('')
     .slice(0, 2)
     .toUpperCase()
+
+export const firstNameInitial = (name: string) =>
+  name.trim().split(/\s+/)[0]?.charAt(0).toUpperCase() ?? ''
 
 export function avatarColor(identity: string) {
   let hash = 0x811c9dc5

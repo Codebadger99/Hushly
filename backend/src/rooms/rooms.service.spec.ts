@@ -118,6 +118,24 @@ describe('RoomsService', () => {
     expect(service.previewRoom('NOTACODE')).toEqual({ error: 'Room not found' });
   });
 
+  it('previews a room using an opaque invite token without exposing its code', () => {
+    const owner = service.createRoom('Midnight lounge', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner) || !('inviteToken' in owner)) {
+      throw new Error('Expected the room to be created');
+    }
+
+    expect(owner.inviteToken).not.toBe(owner.roomCode);
+    expect(service.previewInvite(owner.inviteToken)).toEqual({
+      roomName: 'Midnight lounge',
+    });
+    expect(service.previewInvite('not-a-valid-token')).toEqual({ error: 'Room not found' });
+    const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
+    expect(guest).toMatchObject({
+      roomCode: owner.roomCode,
+    });
+    expect(guest).not.toHaveProperty('inviteToken');
+  });
+
   it('reports typing status only when a participant changes typing state', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
@@ -217,8 +235,9 @@ describe('RoomsService', () => {
     service.handleDisconnect('owner-socket');
     jest.advanceTimersByTime(30_000);
 
-    expect(onDestroyed).toHaveBeenCalledWith(owner.roomCode);
+    expect(onDestroyed).toHaveBeenCalledWith(owner.roomCode, 'owner-disconnected');
     expect(service.previewRoom(owner.roomCode)).toEqual({ error: 'Room not found' });
+    expect(service.previewInvite(owner.inviteToken)).toEqual({ error: 'Room not found' });
     expect(service.reconnect(owner.roomCode, guest.token, 'guest-retry', GUEST_IDENTITY))
       .toEqual({ error: 'Room not found' });
   });
@@ -237,6 +256,7 @@ describe('RoomsService', () => {
     );
     expect(reconnected).toHaveProperty('roomCode', owner.roomCode);
     expect(reconnected).toHaveProperty('ownerGraceMs', 30_000);
+    expect(reconnected).toHaveProperty('inviteToken', owner.inviteToken);
 
     jest.advanceTimersByTime(30_000);
 
@@ -251,7 +271,7 @@ describe('RoomsService', () => {
 
     expect(service.destroyRoom('owner-socket')).toEqual({ ok: true });
 
-    expect(onDestroyed).toHaveBeenCalledWith(owner.roomCode);
+    expect(onDestroyed).toHaveBeenCalledWith(owner.roomCode, 'owner-ended');
     expect(service.previewRoom(owner.roomCode)).toEqual({ error: 'Room not found' });
   });
 });

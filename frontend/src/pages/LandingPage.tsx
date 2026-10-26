@@ -1,4 +1,4 @@
-import { ArrowUpRight, HeartHandshake, Hourglass, Plus, Users } from 'lucide-react'
+import { ArrowUpRight, HeartHandshake, Hourglass, Plus, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { SiteChrome } from '@/components/site/SiteChrome'
@@ -7,6 +7,8 @@ import Logo from '../../public/Motion · floating spirit.png'
 type LandingPageProps = {
   onJoin: () => void
   onCreate: () => void
+  roomClosureNotice: string
+  onDismissRoomClosure: () => void
 }
 
 function LandingIllustration() {
@@ -32,9 +34,27 @@ function LandingIllustration() {
   )
 }
 
-export function LandingPage({ onJoin, onCreate }: LandingPageProps) {
+export function LandingPage({
+  onJoin,
+  onCreate,
+  roomClosureNotice,
+  onDismissRoomClosure,
+}: LandingPageProps) {
   return (
     <SiteChrome home onHome={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+      {roomClosureNotice && (
+        <div className="error-popup room-closed-popup" role="alert">
+          <span>{roomClosureNotice}</span>
+          <button
+            type="button"
+            className="error-popup-dismiss"
+            aria-label="Dismiss room closed alert"
+            onClick={onDismissRoomClosure}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
       <section className="home-hero mx-auto grid w-[min(100%-3rem,1240px)] flex-1 items-center gap-12 py-12 md:w-[min(100%-9.4%,1240px)] md:grid-cols-2 md:gap-[7%] md:py-[70px]">
         <div className="hero-copy">
           <BlurFade className="eyebrow flex items-center gap-2 text-[10px] font-semibold tracking-wide text-[#d5ff67]">

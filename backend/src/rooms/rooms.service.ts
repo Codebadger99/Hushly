@@ -11,12 +11,14 @@ const CODE_LENGTH = 8;
 const MAX_PARTICIPANTS_PER_ROOM = 100;
 const MAX_MESSAGES_PER_ROOM = 500;
 const NOT_FOUND = 'Room not found'; // one message for every kind of failure
+type RoomDestroyReason = 'owner-disconnected' | 'owner-ended' | 'room-inactive';
 
 @Injectable()
 export class RoomsService {
   private rooms = new Map<string, Room>(); // room code -> room
+  private inviteIndex = new Map<string, string>(); // opaque invite token -> room code
   private socketIndex = new Map<string, string>(); // socket id -> room code
-  private onDestroyed?: (code: string) => void;
+  private onDestroyed?: (code: string, reason: RoomDestroyReason) => void;
 
   private inactivityMs: number;
   private ownerGraceMs: number;
@@ -31,8 +33,16 @@ export class RoomsService {
     this.ownerGraceMs = Number(config.get('OWNER_GRACE_MS')) || 30000;
   }
 
+  previewInvite(token: string) {
+    if (typeof token !== 'string') return { error: NOT_FOUND };
+    const code = this.inviteIndex.get(token);
+    const room = code ? this.rooms.get(code) : undefined;
+    if (!room) return { error: NOT_FOUND };
+    return { roomName: room.name };
+  }
+
   // The gateway registers this so it can notify and disconnect people on destroy
-  setDestroyHandler(fn: (code: string) => void) {
+  setDestroyHandler(fn: (code: string, reason: RoomDestroyReason) => void) {
     this.onDestroyed = fn;
   }
 
@@ -94,7 +104,7 @@ export class RoomsService {
       // Re-check: room must still be this room, and the owner still gone
       if (this.rooms.get(room.code) !== room) return;
       const owner = room.participants.get(room.ownerId);
-      if (owner && owner.socketId === null) this.destroy(room.code);
+      if (owner && owner.socketId === null) this.destroy(room.code, 'owner-disconnected');
     }, this.ownerGraceMs);
   }
 
@@ -103,7 +113,7 @@ export class RoomsService {
     room.inactivityTimer = setTimeout(() => {
       // Re-check: room must still exist and still be empty
       if (this.rooms.get(room.code) !== room) return;
-      if (this.connectedCount(room) === 0) this.destroy(room.code);
+      if (this.connectedCount(room) === 0) this.destroy(room.code, 'room-inactive');
     }, this.inactivityMs);
   }
 
@@ -117,7 +127,7 @@ export class RoomsService {
 
   // ---------- destroy ----------
 
-  private destroy(code: string) {
+  private destroy(code: string, reason: RoomDestroyReason) {
     const room = this.rooms.get(code);
     if (!room) return;
 
@@ -127,7 +137,8 @@ export class RoomsService {
     }
     // Deleting the room also wipes messages, participants and tokens
     this.rooms.delete(code);
-    this.onDestroyed?.(code);
+    this.inviteIndex.delete(room.inviteToken);
+    this.onDestroyed?.(code, reason);
   }
 
   // ---------- public actions ----------
@@ -141,6 +152,8 @@ export class RoomsService {
 
     const code = this.generateUniqueCode();
     const token = this.tokens.generate();
+    let inviteToken = randomUUID();
+    while (this.inviteIndex.has(inviteToken)) inviteToken = randomUUID();
 
     const owner: Participant = {
       id: randomUUID(),
@@ -153,6 +166,7 @@ export class RoomsService {
 
     const room: Room = {
       code,
+      inviteToken,
       name: name.trim(),
       ownerId: owner.id,
       participants: new Map([[owner.id, owner]]),
@@ -162,10 +176,12 @@ export class RoomsService {
     };
 
     this.rooms.set(code, room);
+    this.inviteIndex.set(inviteToken, code);
     this.socketIndex.set(socketId, code);
 
     return {
       roomCode: code,
+      inviteToken,
       roomName: room.name,
       participantId: owner.id,
       displayName: owner.displayName,
@@ -270,6 +286,7 @@ export class RoomsService {
       messages: room.messages,
       connectedCount: this.connectedCount(room),
       ownerGraceMs: this.ownerGraceMs,
+      ...(participant.isOwner ? { inviteToken: room.inviteToken } : {}),
     };
   }
 
@@ -446,7 +463,7 @@ export class RoomsService {
 
     // Owner leaving on purpose destroys the room immediately
     if (participant.isOwner) {
-      this.destroy(room.code);
+      this.destroy(room.code, 'owner-ended');
       return { ok: true, destroyed: true };
     }
 
@@ -469,7 +486,7 @@ export class RoomsService {
     const participant = this.findParticipantBySocket(room, socketId);
     if (!participant || !participant.isOwner) return { error: 'Not allowed' };
 
-    this.destroy(room.code);
+    this.destroy(room.code, 'owner-ended');
     return { ok: true };
   }
 

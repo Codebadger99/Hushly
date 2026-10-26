@@ -23,6 +23,7 @@ export interface Message {
 
 export interface Room {
   code: string;
+  inviteToken: string;
   name: string;
   ownerId: string;
   participants: Map<string, Participant>;

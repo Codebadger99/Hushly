@@ -24,7 +24,7 @@ import type {
   RoomParticipant,
   Session,
 } from '@/types/hushly'
-import { avatarColor, initials } from '@/types/hushly'
+import { avatarColor, firstNameInitial, initials } from '@/types/hushly'
 import Logo from '../../public/Spirit mark.png'
 
 const composerEmojis = ['😊', '😂', '🥹', '😍', '😎', '👀', '🙌', '👏', '❤️', '✨', '🔥', '👍']
@@ -259,7 +259,7 @@ export function ChatRoomPage({
               onClick={onCopyCode}
               aria-label={`Copy room code ${session.roomCode}`}
             >
-              <Ticket size={14} /> {session.roomCode}
+              <Ticket className="desktop-room-ticket" size={14} /> {session.roomCode}
             </Button>
           ) : (
             <span className="private-room-label">Private room</span>
@@ -459,9 +459,9 @@ export function ChatRoomPage({
       {welcomeVisible && welcomeName && (
         <div className="welcome-toast" role="status">
           <span className="profile-pill toast-avatar" aria-hidden="true">
-            {initials(welcomeName).slice(0, 1)}
+            {firstNameInitial(welcomeName)}
           </span>
-          <span>
+          <span className="welcome-toast-copy">
             <strong>You’re {welcomeName}</strong>
             <small>That’s your name for this room.</small>
           </span>
@@ -470,9 +470,9 @@ export function ChatRoomPage({
       {roomNotice && (
         <div className="welcome-toast join-notice-toast" role="status" aria-live="polite">
           <span className="profile-pill toast-avatar" aria-hidden="true">
-            {initials(roomNotice.displayName).slice(0, 1)}
+            {firstNameInitial(roomNotice.displayName)}
           </span>
-          <span>
+          <span className="welcome-toast-copy">
             <strong>{roomNotice.displayName} joined the room</strong>
             <small>Say hello and make them feel welcome.</small>
           </span>

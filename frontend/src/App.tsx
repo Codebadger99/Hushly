@@ -33,22 +33,23 @@ const SESSION_STORAGE_KEY = 'hushly-room-session'
 const CLIENT_IDENTITY_KEY = 'hushly-client-identity'
 const ROOM_CODE_PATTERN = /^[A-HJ-KM-NP-Z2-9]{8}$/
 
-type InvitationQuery = { code: string; error: string } | null
+type InvitationQuery = { code: string; token: string; error: string } | null
 
 function readInvitationQuery(): InvitationQuery {
-  const rawCode = new URLSearchParams(window.location.search).get('invite')
-  if (rawCode === null) return null
-  const code = rawCode.trim().toUpperCase()
-  return ROOM_CODE_PATTERN.test(code)
-    ? { code, error: '' }
-    : { code: '', error: 'This invitation link is invalid.' }
+  const rawInvite = new URLSearchParams(window.location.search).get('invite')
+  if (rawInvite === null) return null
+  const value = rawInvite.trim()
+  const code = value.toUpperCase()
+  if (ROOM_CODE_PATTERN.test(code)) return { code, token: '', error: '' }
+  if (/^[A-Za-z0-9_-]{32,64}$/.test(value)) return { code: '', token: value, error: '' }
+  return { code: '', token: '', error: 'This invitation link is invalid.' }
 }
 
-function makeInviteLink(code: string) {
+function makeInviteLink(token: string) {
   const url = new URL(window.location.href)
   url.search = ''
   url.hash = ''
-  url.searchParams.set('invite', code)
+  url.searchParams.set('invite', token)
   return url.toString()
 }
 
@@ -125,6 +126,7 @@ function App() {
   const [roomName, setRoomName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [invitationCode, setInvitationCode] = useState(initialInvitation?.code ?? '')
+  const [invitationToken, setInvitationToken] = useState(initialInvitation?.token ?? '')
   const [session, setSession] = useState<Session | null>(initialSession)
   const [inviteRoomName, setInviteRoomName] = useState('')
   const [inviteLoading, setInviteLoading] = useState(
@@ -144,6 +146,7 @@ function App() {
   const [connectedCount, setConnectedCount] = useState(initialSession ? 1 : 0)
   const [ownerGraceEndsAt, setOwnerGraceEndsAt] = useState<number | null>(null)
   const [pendingRoomEnd, setPendingRoomEnd] = useState(false)
+  const [roomClosureNotice, setRoomClosureNotice] = useState('')
   const [welcomeName, setWelcomeName] = useState('')
   const [shareFeedback, setShareFeedback] = useState('')
   const [typingParticipants, setTypingParticipants] = useState<Record<string, string>>({})
@@ -168,6 +171,12 @@ function App() {
     }, 5000)
     return () => window.clearTimeout(timer)
   }, [roomNotice])
+
+  useEffect(() => {
+    if (!roomClosureNotice) return
+    const timer = window.setTimeout(() => setRoomClosureNotice(''), 8000)
+    return () => window.clearTimeout(timer)
+  }, [roomClosureNotice])
 
   useEffect(() => {
     const ownsInviteScreen = screen === 'invite' && session?.isOwner
@@ -201,7 +210,17 @@ function App() {
           !displayName ||
           !Array.isArray(restoredMessages)
         ) {
-          setError(result.error || 'Could not restore your room. Please join again.')
+          const roomExpired = result.error === 'Room not found'
+          if (roomExpired) {
+            setRoomClosureNotice(
+              session?.isOwner
+                ? 'Your room closed because you did not reconnect before the grace period ended.'
+                : 'This room is no longer available. It may have closed because the owner did not reconnect in time.',
+            )
+            setError('')
+          } else {
+            setError(result.error || 'Could not restore your room. Please join again.')
+          }
           pendingRoomEndRef.current = false
           setPendingRoomEnd(false)
           socket.disconnect()
@@ -215,7 +234,7 @@ function App() {
           setBlockedParticipants([])
           setRoomNotices([])
           setSession(null)
-          setScreen('join')
+          setScreen(roomExpired ? 'home' : 'join')
           sessionStorage.removeItem(SESSION_STORAGE_KEY)
           return
         }
@@ -243,6 +262,7 @@ function App() {
           token: currentRoomToken,
           messages: restoredMessages,
           isOwner: result.isOwner,
+          ...(result.isOwner && result.inviteToken ? { inviteToken: result.inviteToken } : {}),
         }
         setMessages((current) => mergeMessages(current, restoredMessages))
         setConnectedCount(result.connectedCount ?? 1)
@@ -274,8 +294,17 @@ function App() {
       const id = ++roomNoticeSequenceRef.current
       setRoomNotices((current) => [...current, { id, displayName: notice.displayName }])
     }
-    function handleRoomDestroyed() {
-      setError('This room has closed. Good things do not need to last forever.')
+    function handleRoomDestroyed(data?: {
+      reason?: 'owner-disconnected' | 'owner-ended' | 'room-inactive'
+    }) {
+      const message =
+        data?.reason === 'owner-disconnected'
+          ? 'The owner did not reconnect in time, so the room and its chat were deleted.'
+          : data?.reason === 'owner-ended'
+            ? 'The owner ended this room, so its chat and invite code were deleted.'
+            : 'This room closed after everyone disconnected, so its chat and invite code were deleted.'
+      setRoomClosureNotice(message)
+      setError('')
       socket.disconnect()
       socketRef.current = null
       pendingRoomEndRef.current = false
@@ -368,7 +397,7 @@ function App() {
       screen !== 'invite' ||
       session?.isOwner ||
       inviteError ||
-      !ROOM_CODE_PATTERN.test(invitationCode)
+      (!invitationToken && !ROOM_CODE_PATTERN.test(invitationCode))
     ) {
       return
     }
@@ -380,7 +409,9 @@ function App() {
     function requestPreview() {
       if (requested) return
       requested = true
-      socket.emit('room:preview', { code: invitationCode }, (result: SocketResponse) => {
+      const eventName = invitationToken ? 'room:invite:preview' : 'room:preview'
+      const payload = invitationToken ? { token: invitationToken } : { code: invitationCode }
+      socket.emit(eventName, payload, (result: SocketResponse) => {
         if (cancelled) return
         setInviteLoading(false)
         if (result.error || !result.roomName) {
@@ -408,7 +439,7 @@ function App() {
       socket.off('connect_error', handlePreviewConnectionError)
       socket.disconnect()
     }
-  }, [invitationCode, inviteError, screen, session?.isOwner])
+  }, [invitationCode, invitationToken, inviteError, screen, session?.isOwner])
 
   function connectToRoom(
     event: FormEvent<HTMLFormElement> | undefined,
@@ -443,6 +474,7 @@ function App() {
           result.error ||
           !result.roomCode ||
           !result.token ||
+          (mode === 'create' && !result.inviteToken) ||
           !result.roomName ||
           !result.participantId ||
           !result.displayName
@@ -461,11 +493,15 @@ function App() {
           token: result.token,
           messages: result.messages ?? [],
           isOwner: mode === 'create',
+          ...(mode === 'create' && result.inviteToken
+            ? { inviteToken: result.inviteToken }
+            : {}),
         }
         if (typeof result.ownerGraceMs === 'number' && result.ownerGraceMs > 0) {
           ownerGraceDurationRef.current = result.ownerGraceMs
         }
         setSession(nextSession)
+        setRoomClosureNotice('')
         setMessages(nextSession.messages)
         setConnectedCount(result.connectedCount ?? 1)
         setOwnerGraceEndsAt(null)
@@ -647,9 +683,12 @@ function App() {
   }
 
   async function copyInviteLink() {
-    if (!session) return
+    if (!session?.inviteToken) {
+      setError('Could not create a secure invitation link. Reconnect and try again.')
+      return
+    }
     try {
-      await navigator.clipboard.writeText(makeInviteLink(session.roomCode))
+      await navigator.clipboard.writeText(makeInviteLink(session.inviteToken))
       setShareFeedback('Invitation link copied')
       window.setTimeout(() => setShareFeedback(''), 2200)
     } catch {
@@ -665,6 +704,7 @@ function App() {
     window.history.replaceState({}, '', window.location.pathname)
     setInviteCode('')
     setInvitationCode('')
+    setInvitationToken('')
     setInviteRoomName('')
     setInviteError('')
     setScreen('join')
@@ -723,7 +763,11 @@ function App() {
           isOwner={Boolean(session?.isOwner)}
           roomName={session?.isOwner ? session.roomName : inviteRoomName}
           roomCode={session?.isOwner ? session.roomCode : undefined}
-          inviteLink={session?.isOwner ? makeInviteLink(session.roomCode) : undefined}
+          inviteLink={
+            session?.isOwner && session.inviteToken
+              ? makeInviteLink(session.inviteToken)
+              : undefined
+          }
           invitationCode={session?.isOwner ? undefined : invitationCode}
           inviteCode={inviteCode}
           onInviteCodeChange={(value) =>
@@ -748,7 +792,12 @@ function App() {
   if (screen === 'home') {
     return (
       <Suspense fallback={<PageLoading />}>
-        <LandingPage onJoin={() => navigate('join')} onCreate={() => navigate('create')} />
+        <LandingPage
+          onJoin={() => navigate('join')}
+          onCreate={() => navigate('create')}
+          roomClosureNotice={roomClosureNotice}
+          onDismissRoomClosure={() => setRoomClosureNotice('')}
+        />
       </Suspense>
     )
   }
