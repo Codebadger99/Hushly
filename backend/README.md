@@ -44,6 +44,21 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Security configuration
+
+Set `CORS_ORIGIN` to a comma-separated list of exact frontend origins, for example
+`https://hushly.example,https://www.hushly.example`. Browser Socket.IO connections without an
+explicitly allowed origin are rejected. See `.env.example` for the supported settings.
+
+Set `TRUST_PROXY=true` only when deployed behind a trusted reverse proxy that appends the actual
+client address to `X-Forwarded-For`; otherwise leave it false. In-memory rate limits are per process,
+so horizontally scaled deployments need a shared rate-limit store and edge-level abuse protection.
+Rooms accept up to 100 participants and retain only the latest 500 messages.
+
+Room blocks are best-effort browser-profile controls, not identity verification: without accounts,
+a determined visitor can switch browsers or clear site data. Do not use Hushly's anonymous blocks
+as protection for sensitive or high-risk conversations.
+
 ## Run tests
 
 ```bash

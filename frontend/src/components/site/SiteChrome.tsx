@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ArrowUpRight } from 'lucide-react'
+import Logo from '../../../public/Spirit mark.png'
 
 type SiteChromeProps = {
   children: ReactNode
@@ -20,7 +21,7 @@ export function SiteChrome({ children, home, onHome }: SiteChromeProps) {
           }}
           aria-label="Hushly home"
         >
-          <img className="brand-spirit" src="/spirit-mark.png" alt="" />
+          <img className="brand-spirit" src={Logo} alt="hushly" />
           <span>hushly</span>
         </a>
         <div className="header-right flex items-center gap-7">

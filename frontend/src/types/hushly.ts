@@ -37,6 +37,7 @@ export type SocketResponse = Partial<Session> & {
   error?: string
   ok?: boolean
   connectedCount?: number
+  ownerGraceMs?: number
 }
 
 export type RoomPresence = {

@@ -86,6 +86,28 @@ describe('RoomsService', () => {
     expect(service.getOwnerRoster(owner.roomCode)?.participants).toHaveLength(2);
   });
 
+  it('caps rooms at 100 participants', () => {
+    const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+
+    for (let index = 1; index < 100; index += 1) {
+      const identity = `b0000000-0000-4000-8000-${index.toString().padStart(12, '0')}`;
+      const joined = service.joinRoom(owner.roomCode, `guest-${index}`, identity);
+      expect(joined).toHaveProperty('participantId');
+    }
+
+    expect(service.getOwnerRoster(owner.roomCode)?.participants).toHaveLength(100);
+    expect(
+      service.joinRoom(
+        owner.roomCode,
+        'extra-guest',
+        'c0000000-0000-4000-8000-000000000003',
+      ),
+    ).toEqual({
+      error: 'This room is full. Ask the host to make space and try again.',
+    });
+  });
+
   it('previews a room by invite code without exposing its code', () => {
     const owner = service.createRoom('Midnight lounge', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
@@ -174,10 +196,62 @@ describe('RoomsService', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
 
+    expect(owner.ownerGraceMs).toBe(30_000);
     service.handleDisconnect('owner-socket');
 
     expect(service.getRoomPresence(owner.roomCode)?.ownerGraceEndsAt).toBe(
       Date.now() + 30_000,
     );
+  });
+
+  it('destroys the room and its contents when the owner does not reconnect', () => {
+    jest.useFakeTimers();
+    const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
+    if (!('participantId' in guest)) throw new Error('Expected the guest to join');
+    service.sendMessage(owner.roomCode, 'guest-socket', 'Room message');
+    const onDestroyed = jest.fn();
+    service.setDestroyHandler(onDestroyed);
+
+    service.handleDisconnect('owner-socket');
+    jest.advanceTimersByTime(30_000);
+
+    expect(onDestroyed).toHaveBeenCalledWith(owner.roomCode);
+    expect(service.previewRoom(owner.roomCode)).toEqual({ error: 'Room not found' });
+    expect(service.reconnect(owner.roomCode, guest.token, 'guest-retry', GUEST_IDENTITY))
+      .toEqual({ error: 'Room not found' });
+  });
+
+  it('keeps the room when the owner reconnects before the grace period ends', () => {
+    jest.useFakeTimers();
+    const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+
+    service.handleDisconnect('owner-socket');
+    const reconnected = service.reconnect(
+      owner.roomCode,
+      owner.token,
+      'owner-reconnected',
+      OWNER_IDENTITY,
+    );
+    expect(reconnected).toHaveProperty('roomCode', owner.roomCode);
+    expect(reconnected).toHaveProperty('ownerGraceMs', 30_000);
+
+    jest.advanceTimersByTime(30_000);
+
+    expect(service.previewRoom(owner.roomCode)).toEqual({ roomName: 'A room' });
+  });
+
+  it('destroys the room when its owner explicitly ends it', () => {
+    const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    const onDestroyed = jest.fn();
+    service.setDestroyHandler(onDestroyed);
+
+    expect(service.destroyRoom('owner-socket')).toEqual({ ok: true });
+
+    expect(onDestroyed).toHaveBeenCalledWith(owner.roomCode);
+    expect(service.previewRoom(owner.roomCode)).toEqual({ error: 'Room not found' });
   });
 });

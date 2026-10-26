@@ -2,6 +2,7 @@ import { ArrowUpRight, HeartHandshake, Hourglass, Plus, Users } from 'lucide-rea
 import { Button } from '@/components/ui/button'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { SiteChrome } from '@/components/site/SiteChrome'
+import Logo from '../../public/Motion · floating spirit.png'
 
 type LandingPageProps = {
   onJoin: () => void
@@ -20,10 +21,7 @@ function LandingIllustration() {
         <span className="bubble-dot" />
         any night owls here?
       </div>
-      <div className="mascot" aria-hidden="true">
-        <i />
-        <i />
-      </div>
+      <img src={Logo} alt="hushly" className="mascot" />
       <div className="speech-bubble bubble-bottom">
         <span>MELLOW MOON</span>
         <br />

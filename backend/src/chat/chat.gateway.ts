@@ -30,7 +30,8 @@ export class ChatGateway
     // When a room is destroyed: tell everyone, then disconnect them
     this.roomsService.setDestroyHandler((code) => {
       this.server.to(code).emit('room:destroyed');
-      this.server.in(code).disconnectSockets(true);
+      // Let room notifications and Socket.IO acknowledgements flush before closing sockets.
+      setTimeout(() => this.server.in(code).disconnectSockets(true), 0);
     });
   }
 
@@ -50,6 +51,7 @@ export class ChatGateway
 
   @SubscribeMessage('room:state:request')
   handleRoomStateRequest(@ConnectedSocket() client: Socket) {
+    if (!this.rateLimit.allow(`state:${client.id}`, 30, 60_000)) return TOO_MANY;
     const code = this.roomsService.getParticipantRoomCode(client.id);
     if (!code) return { error: 'Room not found' };
     this.publishRoomState(code);
@@ -57,6 +59,10 @@ export class ChatGateway
   }
 
   handleConnection(client: Socket) {
+    if (!this.rateLimit.allow(`connect:${this.ip(client)}`, 120, 60_000)) {
+      client.disconnect(true);
+      return;
+    }
     console.log(`Connected: ${client.id}`);
   }
 
@@ -229,6 +235,7 @@ export class ChatGateway
     @MessageBody() data: { participantId: string },
     @ConnectedSocket() client: Socket,
   ) {
+    if (!this.rateLimit.allow(`moderation:${client.id}`, 20, 60_000)) return TOO_MANY;
     const result = this.roomsService.blockParticipant(client.id, data?.participantId);
     if ('error' in result) return result;
 
@@ -251,6 +258,7 @@ export class ChatGateway
     @MessageBody() data: { blockedId: string },
     @ConnectedSocket() client: Socket,
   ) {
+    if (!this.rateLimit.allow(`moderation:${client.id}`, 20, 60_000)) return TOO_MANY;
     const result = this.roomsService.unblockParticipant(client.id, data?.blockedId);
     if ('error' in result) return result;
     this.publishRoomState(result.roomCode);
@@ -270,6 +278,7 @@ export class ChatGateway
 
   @SubscribeMessage('room:destroy')
   handleDestroy(@ConnectedSocket() client: Socket) {
+    if (!this.rateLimit.allow(`destroy:${client.id}`, 3, 60_000)) return TOO_MANY;
     return this.roomsService.destroyRoom(client.id);
   }
 }

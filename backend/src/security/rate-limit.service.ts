@@ -4,6 +4,7 @@ import { Injectable, OnModuleDestroy } from '@nestjs/common';
 @Injectable()
 export class RateLimitService implements OnModuleDestroy {
   private hits = new Map<string, number[]>();
+  private readonly maxTrackedKeys = 50_000;
   private sweeper: NodeJS.Timeout;
 
   constructor() {
@@ -13,6 +14,7 @@ export class RateLimitService implements OnModuleDestroy {
 
   // true = allowed, false = too many requests
   allow(key: string, limit: number, windowMs: number): boolean {
+    if (!this.hits.has(key) && this.hits.size >= this.maxTrackedKeys) return false;
     const now = Date.now();
     const recent = (this.hits.get(key) ?? []).filter((t) => now - t < windowMs);
     if (recent.length >= limit) {

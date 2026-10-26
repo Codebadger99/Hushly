@@ -25,6 +25,7 @@ import type {
   Session,
 } from '@/types/hushly'
 import { avatarColor, initials } from '@/types/hushly'
+import Logo from '../../public/Spirit mark.png'
 
 const composerEmojis = ['😊', '😂', '🥹', '😍', '😎', '👀', '🙌', '👏', '❤️', '✨', '🔥', '👍']
 
@@ -39,12 +40,15 @@ type ChatRoomPageProps = {
   connected: boolean
   connectedCount: number
   ownerGraceEndsAt: number | null
+  pendingRoomEnd: boolean
   welcomeName: string
   roomNotice: RoomNotice | null
   typingParticipants: string[]
   participants: RoomParticipant[]
   blockedParticipants: BlockedParticipant[]
   onDraftChange: (value: string | ((current: string) => string)) => void
+  onDismissError: () => void
+  onDismissSendFailure: () => void
   onSend: (event: FormEvent<HTMLFormElement>) => void
   onEditMessage: (messageId: string, body: string) => void
   onDeleteMessage: (messageId: string) => void
@@ -67,12 +71,15 @@ export function ChatRoomPage({
   connected,
   connectedCount,
   ownerGraceEndsAt,
+  pendingRoomEnd,
   welcomeName,
   roomNotice,
   typingParticipants,
   participants,
   blockedParticipants,
   onDraftChange,
+  onDismissError,
+  onDismissSendFailure,
   onSend,
   onEditMessage,
   onDeleteMessage,
@@ -227,13 +234,13 @@ export function ChatRoomPage({
   const lastOwnMessageId = [...messages]
     .reverse()
     .find((message) => message.senderId === session.participantId)?.id
+  const connectedParticipants = participants.filter((participant) => participant.connected)
 
   return (
     <main className="chat-shell min-h-svh bg-[#0d100d] text-[#edeee8]">
       <header className="chat-header flex items-center justify-between border-b border-[#2b3229]">
         <div className="chat-room-title">
           <div className="chat-room-heading">
-            <img className="chat-brand-mark" src="/spirit-mark.png" alt="Hushly" />
             <h1>{session.roomName}</h1>
           </div>
           <span className="chat-room-status">
@@ -257,7 +264,7 @@ export function ChatRoomPage({
           ) : (
             <span className="private-room-label">Private room</span>
           )}
-          <span className="profile-pill hidden md:grid" title={session.displayName}>
+          <span className="profile-pill hidden place-items-center md:grid" title={session.displayName}>
             {initials(session.displayName)}
           </span>
           <DropdownMenu.Root>
@@ -303,7 +310,7 @@ export function ChatRoomPage({
                 )}
                 {session.isOwner && (
                   <DropdownMenu.Item
-                    className="danger-item cursor-pointer rounded px-2 py-2 text-xs text-[#ff9387] outline-none hover:bg-[#272d25] focus:bg-[#272d25]"
+                    className="danger-item cursor-pointer rounded px-2 py-2 text-xs outline-none hover:bg-[#272d25] focus:bg-[#272d25]"
                     onSelect={(event) => {
                       event.preventDefault()
                       setConfirmClose(true)
@@ -331,7 +338,7 @@ export function ChatRoomPage({
             <section className="people-section" aria-label="People in this room">
               <h3>In this room ({connectedCount} connected)</h3>
               <div className="people-list">
-                {participants.map((participant) => (
+                {connectedParticipants.map((participant) => (
                   <div className="person-row" key={participant.id}>
                     <div className="person-details">
                       <strong>{participant.displayName}{participant.isOwner ? ' (you)' : ''}</strong>
@@ -351,8 +358,8 @@ export function ChatRoomPage({
                     )}
                   </div>
                 ))}
-                {participants.length === 0 && (
-                  <p className="people-empty">No participants are listed yet.</p>
+                {connectedParticipants.length === 0 && (
+                  <p className="people-empty">No one is connected right now.</p>
                 )}
               </div>
             </section>
@@ -400,17 +407,21 @@ export function ChatRoomPage({
         </Dialog.Portal>
       </Dialog.Root>
 
-      {!connected && (
+      {!connected &&
+        (!session.isOwner || pendingRoomEnd || graceSeconds === null) && (
         <p className="connection-alert" role="alert">
-          Connection lost. Reconnecting to your room…
-          {session.isOwner && ' The room will close if you do not reconnect in time.'}
+          <span>
+            {pendingRoomEnd
+              ? 'End room requested. It will close as soon as your connection returns.'
+              : 'Connection lost. Reconnecting to your room…'}
+          </span>
         </p>
       )}
 
       <AlertDialog.Root open={confirmClose} onOpenChange={setConfirmClose}>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="close-room-overlay fixed inset-0 z-50 bg-black/65" />
-          <AlertDialog.Content className="close-room-dialog fixed left-1/2 top-1/2 z-50 w-[min(calc(100%-2rem),420px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#30382d] bg-[#171b17] shadow-2xl">
+          <AlertDialog.Content className="close-room-dialog fixed left-1/2 top-1/2 z-50 w-[min(calc(100%-2rem),420px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#30382d] bg-[#171b17]">
             <AlertDialog.Title className="text-lg font-semibold text-[#edeee8]">
               End this room?
             </AlertDialog.Title>
@@ -429,10 +440,10 @@ export function ChatRoomPage({
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
                 <Button
-                  className="rounded-lg bg-[#d5ff67] text-sm font-semibold text-[#151a0d] hover:bg-[#e0ff8b]"
+                  className="end-room-confirm-button rounded-lg text-sm font-semibold"
                   onClick={onClose}
                 >
-                  End room
+                  End room for everyone
                 </Button>
               </AlertDialog.Action>
             </div>
@@ -447,7 +458,9 @@ export function ChatRoomPage({
       )}
       {welcomeVisible && welcomeName && (
         <div className="welcome-toast" role="status">
-          <img src="/spirit-mark.png" alt="" />
+          <span className="profile-pill toast-avatar" aria-hidden="true">
+            {initials(welcomeName).slice(0, 1)}
+          </span>
           <span>
             <strong>You’re {welcomeName}</strong>
             <small>That’s your name for this room.</small>
@@ -456,7 +469,9 @@ export function ChatRoomPage({
       )}
       {roomNotice && (
         <div className="welcome-toast join-notice-toast" role="status" aria-live="polite">
-          <img src="/spirit-mark.png" alt="" />
+          <span className="profile-pill toast-avatar" aria-hidden="true">
+            {initials(roomNotice.displayName).slice(0, 1)}
+          </span>
           <span>
             <strong>{roomNotice.displayName} joined the room</strong>
             <small>Say hello and make them feel welcome.</small>
@@ -468,7 +483,7 @@ export function ChatRoomPage({
         {messages.length === 0 ? (
           <div className="empty-chat">
             <div className="empty-orbit">
-              <img className="chat-spirit-mark" src="/spirit-mark.png" alt="" />
+              <img className="chat-spirit-mark" src={Logo} alt="" />
             </div>
             <h2>A little space. A lot to say.</h2>
             <p>Start with a question, a thought, or whatever brought you here.</p>
@@ -622,9 +637,9 @@ export function ChatRoomPage({
           <div className="owner-grace-notice" role="status" aria-live="polite">
             <Timer size={17} aria-hidden="true" />
             <span>
-              <strong>Host reconnect grace</strong>
+              <strong>Room owner reconnecting</strong>
               <span>
-                <b>{graceSeconds}s</b> remaining. The room closes if the host doesn’t return.
+                <b>{graceSeconds}s</b> remaining. The chat will be destroyed if the owner doesn’t reconnect.
               </span>
             </span>
           </div>
@@ -731,17 +746,27 @@ export function ChatRoomPage({
           </Button>
         </form>
         {sendFailure && (
-          <div className="send-failure" role="alert">
+          <div className="send-failure error-popup" role="alert">
             <span>{sendFailure}</span>
-            <Button
-             type="button"
-             variant="ghost"
-             className="send-retry-button"
-             disabled={!connected || sendingMessage || !draft.trim()}
-             onClick={() => composerRef.current?.form?.requestSubmit()}
-            >
-             Try again
-            </Button>
+            <div className="send-failure-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                className="send-retry-button"
+                disabled={!connected || sendingMessage || !draft.trim()}
+                onClick={() => composerRef.current?.form?.requestSubmit()}
+              >
+                Try again
+              </Button>
+              <button
+                type="button"
+                className="error-popup-dismiss"
+                aria-label="Dismiss message warning"
+                onClick={onDismissSendFailure}
+              >
+                <X size={15} />
+              </button>
+            </div>
           </div>
         )}
         <div className="composer-foot">
@@ -753,8 +778,11 @@ export function ChatRoomPage({
           </span>
         </div>
         {error && (
-          <p className="inline-error" role="alert">
-            {error}
+          <p className="inline-error error-popup chat-error-popup" role="alert">
+            <span>{error}</span>
+            <button type="button" className="error-popup-dismiss" aria-label="Dismiss alert" onClick={onDismissError}>
+              <X size={15} />
+            </button>
           </p>
         )}
       </div>

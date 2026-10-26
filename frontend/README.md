@@ -4,7 +4,8 @@ The React app connects to the NestJS backend over Socket.IO. It supports room cr
 with an 8-character room code, anonymous backend-generated names, live messages and typing status,
 participant counts, owner-only invite codes and participant controls, reconnecting, leaving, and
 host-only room closure. Creating a room opens a share page with its code and an invitation link;
-opening that link previews the room before joining. Owners can block and unblock browser identities;
+opening that link previews the room and asks guests to enter the 8-character code before joining.
+Owners can block and unblock browser identities;
 without accounts, a block can be bypassed by clearing site data or switching browsers/devices.
 
 ## Run locally

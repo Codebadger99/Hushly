@@ -1,13 +1,18 @@
-import { ArrowRight, Check, Copy, Ticket } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowRight, Check, Copy, Ticket, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SiteChrome } from '@/components/site/SiteChrome'
 import type { RoomNotice } from '@/types/hushly'
+import Logo from '../../public/Spirit seal.png'
 
 type RoomInvitePageProps = {
   isOwner: boolean
   roomName: string
   roomCode?: string
   inviteLink?: string
+  invitationCode?: string
+  inviteCode: string
+  onInviteCodeChange: (value: string) => void
   loading?: boolean
   connecting?: boolean
   error?: string
@@ -26,6 +31,9 @@ export function RoomInvitePage({
   roomName,
   roomCode,
   inviteLink,
+  invitationCode,
+  inviteCode,
+  onInviteCodeChange,
   loading = false,
   connecting = false,
   error = '',
@@ -39,17 +47,48 @@ export function RoomInvitePage({
   onHome,
 }: RoomInvitePageProps) {
   const displayName = roomName || (loading ? 'Finding your room…' : 'A little space')
+  const spiritRef = useRef<HTMLImageElement>(null)
+  const [dismissedError, setDismissedError] = useState('')
+
+  useEffect(() => {
+    const spirit = spiritRef.current
+    if (!spirit || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const animation = spirit.animate(
+      [
+        { transform: 'translateY(0) rotate(-2deg)' },
+        { transform: 'translateY(-8px) rotate(2deg)' },
+        { transform: 'translateY(0) rotate(-2deg)' },
+      ],
+      { duration: 2800, easing: 'ease-in-out', iterations: Infinity },
+    )
+
+    return () => animation.cancel()
+  }, [])
 
   return (
     <SiteChrome home={false} onHome={onHome}>
       {isOwner && joinNotice && (
         <div className="welcome-toast join-notice-toast" role="status" aria-live="polite">
-          <img src="/spirit-mark.png" alt="" />
+          <img src={Logo} alt="" />
           <span>
             <strong>{joinNotice.displayName} joined the room</strong>
             <small>Say hello and make them feel welcome.</small>
           </span>
         </div>
+      )}
+      {error && error !== dismissedError && (
+        <p className="form-error error-popup flow-error-popup" role="alert">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="error-popup-dismiss"
+            aria-label="Dismiss alert"
+            onClick={() => setDismissedError(error)}
+          >
+            <X size={15} />
+          </button>
+        </p>
       )}
       <div className="invitation-layout">
         <section className="invitation-copy" aria-label="Room invitation">
@@ -65,7 +104,7 @@ export function RoomInvitePage({
               <span className="invitation-art-orbit" />
             </div>
             <div className="invitation-spirit">
-              <img src="/spirit-mark.png" alt="" />
+              <img ref={spiritRef} src={Logo} alt="" />
             </div>
             <div className="invitation-perforation" aria-hidden="true">
               <span />
@@ -132,8 +171,6 @@ export function RoomInvitePage({
                   {feedback}
                 </p>
               )}
-              {error && <p className="form-error" role="alert">{error}</p>}
-
               <Button
                 className="button button-primary invitation-cta"
                 type="button"
@@ -153,14 +190,39 @@ export function RoomInvitePage({
                   ? 'We’re finding the room your host shared.'
                   : error
                     ? 'This invitation may have expired or the room may have closed.'
-                    : `You’ve been invited to ${displayName}. The invitation code is included, so just join to get your own name for this visit.`}
+                    : `You’ve been invited to ${displayName}. Enter the room code below to continue.`}
               </p>
-              {error && <p className="form-error" role="alert">{error}</p>}
+              <label className="share-label" htmlFor="guest-invite-code">
+                8-character room code
+              </label>
+              <input
+                id="guest-invite-code"
+                className="text-field w-full rounded-lg border border-[#30382d] bg-[#111510] px-3 text-sm uppercase tracking-[0.12em] text-[#e5e7df]"
+                value={inviteCode}
+                onChange={(event) => onInviteCodeChange(event.target.value)}
+                placeholder="Enter room code"
+                maxLength={8}
+                pattern="[A-HJ-KM-NP-Z2-9]{8}"
+                autoComplete="off"
+                spellCheck={false}
+                aria-describedby="guest-invite-code-hint"
+                disabled={loading || connecting}
+              />
+              <p className="share-hint" id="guest-invite-code-hint">
+                {invitationCode
+                  ? <>Enter the code included with this invitation: <strong className="invitation-code-hint">{invitationCode}</strong></>
+                  : 'Ask the host for the 8-character room code.'}
+              </p>
               <Button
                 className="button button-primary invitation-cta"
                 type="button"
                 onClick={onJoinRoom}
-                disabled={loading || connecting || Boolean(error)}
+                disabled={
+                  loading ||
+                  connecting ||
+                  Boolean(error) ||
+                  !/^[A-HJ-KM-NP-Z2-9]{8}$/.test(inviteCode)
+                }
               >
                 {connecting ? 'Joining room…' : 'Join this room'} <ArrowRight size={17} />
               </Button>

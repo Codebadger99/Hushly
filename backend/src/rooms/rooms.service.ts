@@ -8,6 +8,7 @@ import { BlockedParticipant, Message, Participant, Room } from './room.types';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 8;
+const MAX_PARTICIPANTS_PER_ROOM = 100;
 const MAX_MESSAGES_PER_ROOM = 500;
 const NOT_FOUND = 'Room not found'; // one message for every kind of failure
 
@@ -171,6 +172,7 @@ export class RoomsService {
       token,
       messages: [] as Message[],
       connectedCount: 1,
+      ownerGraceMs: this.ownerGraceMs,
     };
   }
 
@@ -182,6 +184,9 @@ export class RoomsService {
     if (!identityHash) return { error: 'Could not verify this browser. Please refresh and try again.' };
     if (room.blockedParticipants.has(identityHash)) {
       return { error: 'This browser has been blocked from this room. Ask the owner to unblock you.' };
+    }
+    if (room.participants.size >= MAX_PARTICIPANTS_PER_ROOM) {
+      return { error: 'This room is full. Ask the host to make space and try again.' };
     }
 
     const token = this.tokens.generate();
@@ -211,6 +216,7 @@ export class RoomsService {
       token,
       messages: room.messages,
       connectedCount: this.connectedCount(room),
+      ownerGraceMs: this.ownerGraceMs,
     };
   }
 
@@ -263,6 +269,7 @@ export class RoomsService {
       isOwner: participant.isOwner,
       messages: room.messages,
       connectedCount: this.connectedCount(room),
+      ownerGraceMs: this.ownerGraceMs,
     };
   }
 

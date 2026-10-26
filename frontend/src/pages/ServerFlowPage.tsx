@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { ArrowRight, ArrowUpRight, HeartHandshake, Ticket } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, HeartHandshake, Ticket, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SiteChrome } from '@/components/site/SiteChrome'
 import type { FlowMode, Screen } from '@/types/hushly'
@@ -12,6 +12,7 @@ type ServerFlowPageProps = {
   onInviteCodeChange: (value: string) => void
   connecting: boolean
   error: string
+  onDismissError: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onNavigate: (screen: Screen) => void
 }
@@ -61,6 +62,7 @@ export function ServerFlowPage({
   onInviteCodeChange,
   connecting,
   error,
+  onDismissError,
   onSubmit,
   onNavigate,
 }: ServerFlowPageProps) {
@@ -127,7 +129,7 @@ export function ServerFlowPage({
                   required
                 />
                 <p className="field-hint">
-                  Example: Midnight lounge. Up to 50 characters; rooms close automatically when
+                  Up to 50 characters; rooms close automatically when
                   everyone has left.
                 </p>
               </>
@@ -205,8 +207,11 @@ export function ServerFlowPage({
               Room requests are limited to help keep Hushly safe.
             </p>
             {error && (
-              <p className="form-error" role="alert">
-                {error}
+              <p className="form-error error-popup flow-error-popup" role="alert">
+                <span>{error}</span>
+                <button type="button" className="error-popup-dismiss" aria-label="Dismiss alert" onClick={onDismissError}>
+                  <X size={15} />
+                </button>
               </p>
             )}
           </form>

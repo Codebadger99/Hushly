@@ -2,6 +2,10 @@ import { INestApplicationContext } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { ServerOptions } from 'socket.io';
 
+export function isAllowedSocketOrigin(origin: unknown, origins: string[]) {
+  return typeof origin === 'string' && origins.includes(origin);
+}
+
 export class CorsIoAdapter extends IoAdapter {
   constructor(app: INestApplicationContext) {
     super(app);
@@ -15,9 +19,11 @@ export class CorsIoAdapter extends IoAdapter {
 
     return super.createIOServer(port, {
       ...options,
-      // No origins configured = browsers are blocked, which is the safe default
       cors: { origin: origins.length ? origins : false },
-      maxHttpBufferSize: 10_000, // 10 KB cap per event, stops oversized payloads
+      allowRequest: (request, callback) => {
+        callback(null, isAllowedSocketOrigin(request.headers.origin, origins));
+      },
+      maxHttpBufferSize: 10_000,
     } as ServerOptions);
   }
 }
