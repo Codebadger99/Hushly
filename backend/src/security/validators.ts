@@ -12,7 +12,8 @@ export function validateRoomName(name: unknown): string | null {
 }
 
 export function validateMessage(body: unknown): string | null {
-  if (typeof body !== 'string' || !body.trim()) return 'Message cannot be empty';
+  if (typeof body !== 'string' || !body.trim())
+    return 'Message cannot be empty';
   if (body.trim().length > MAX_MESSAGE_LENGTH) {
     return `Message must be ${MAX_MESSAGE_LENGTH} characters or less`;
   }
