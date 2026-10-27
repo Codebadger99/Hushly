@@ -37,6 +37,8 @@ export type BlockedParticipant = {
 export type SocketResponse = Partial<Session> & {
   error?: string
   ok?: boolean
+  waitingForOwner?: boolean
+  ownerReady?: boolean
   connectedCount?: number
   ownerGraceMs?: number
 }
@@ -49,6 +51,8 @@ export type RoomPresence = {
 export type RoomNotice = {
   id: number
   displayName: string
+  kind: 'joined' | 'mention'
+  leaving?: boolean
 }
 
 export type FlowMode = Extract<Screen, 'create' | 'join'>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import * as AlertDialog from 'radix-ui/alert-dialog'
 import * as Dialog from 'radix-ui/dialog'
 import * as DropdownMenu from 'radix-ui/dropdown-menu'
@@ -29,6 +29,36 @@ import Logo from '../../public/Spirit mark.png'
 
 const composerEmojis = ['😊', '😂', '🥹', '😍', '😎', '👀', '🙌', '👏', '❤️', '✨', '🔥', '👍']
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function renderMessageBody(body: string, participants: RoomParticipant[]): ReactNode {
+  const names = [...new Set(participants.map((participant) => participant.displayName))]
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+  if (names.length === 0) return body
+
+  const matcher = new RegExp(
+    `@(${names.join('|')})(?=$|[^\\p{L}\\p{N}_])`,
+    'giu',
+  )
+  const parts: ReactNode[] = []
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = matcher.exec(body)) !== null) {
+    parts.push(body.slice(cursor, match.index))
+    parts.push(
+      <span className="message-mention" key={`mention-${match.index}`}>
+        @{match[1]}
+      </span>,
+    )
+    cursor = match.index + match[0].length
+  }
+  parts.push(body.slice(cursor))
+  return parts
+}
+
 type ChatRoomPageProps = {
   session: Session
   messages: Message[]
@@ -43,6 +73,7 @@ type ChatRoomPageProps = {
   pendingRoomEnd: boolean
   welcomeName: string
   roomNotice: RoomNotice | null
+  roomNoticeLeaving: boolean
   typingParticipants: string[]
   participants: RoomParticipant[]
   blockedParticipants: BlockedParticipant[]
@@ -74,6 +105,7 @@ export function ChatRoomPage({
   pendingRoomEnd,
   welcomeName,
   roomNotice,
+  roomNoticeLeaving,
   typingParticipants,
   participants,
   blockedParticipants,
@@ -91,6 +123,8 @@ export function ChatRoomPage({
   onClose,
 }: ChatRoomPageProps) {
   const messageEndRef = useRef<HTMLDivElement | null>(null)
+  const conversationRef = useRef<HTMLElement | null>(null)
+  const shouldStickToBottomRef = useRef(true)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const typingStateRef = useRef(false)
   const messageHoldTimerRef = useRef<number | null>(null)
@@ -106,6 +140,12 @@ export function ChatRoomPage({
     y: number
   } | null>(null)
   const [welcomeVisible, setWelcomeVisible] = useState(Boolean(welcomeName))
+  const [mentionQuery, setMentionQuery] = useState<{
+    start: number
+    end: number
+    query: string
+  } | null>(null)
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [clockNow, setClockNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -139,13 +179,15 @@ export function ChatRoomPage({
   }, [heldMessage])
 
   useEffect(() => {
-    if (!welcomeName) return
+    if (!welcomeName || roomNotice) return
     const timer = window.setTimeout(() => setWelcomeVisible(false), 5000)
     return () => window.clearTimeout(timer)
-  }, [welcomeName])
+  }, [welcomeName, roomNotice])
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const conversation = conversationRef.current
+    if (!conversation || !shouldStickToBottomRef.current) return
+    conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   useEffect(() => {
@@ -160,6 +202,7 @@ export function ChatRoomPage({
 
   function handleSend(event: FormEvent<HTMLFormElement>) {
     setTyping(false)
+    setMentionQuery(null)
     if (!editingMessageId) {
       onSend(event)
       return
@@ -186,6 +229,36 @@ export function ChatRoomPage({
     onDraftChange(draftBeforeEditRef.current)
     draftBeforeEditRef.current = ''
     window.requestAnimationFrame(() => composerRef.current?.focus())
+  }
+
+  function getMentionQuery(value: string, cursor: number) {
+    const textBeforeCursor = value.slice(0, cursor)
+    const start = textBeforeCursor.lastIndexOf('@')
+    if (start < 0 || (start > 0 && /[\p{L}\p{N}_]/u.test(textBeforeCursor[start - 1]))) {
+      return null
+    }
+
+    const query = textBeforeCursor.slice(start + 1)
+    if (query.includes('\n')) return null
+    return { start, end: cursor, query: query.trimStart() }
+  }
+
+  function insertMention(participant: RoomParticipant) {
+    if (!mentionQuery) return
+    const inserted = `@${participant.displayName} `
+    const nextDraft =
+      draft.slice(0, mentionQuery.start) + inserted + draft.slice(mentionQuery.end)
+    onDraftChange(nextDraft)
+    setMentionQuery(null)
+    setSelectedMentionIndex(0)
+    setTyping(true)
+    window.requestAnimationFrame(() => {
+      const composer = composerRef.current
+      if (!composer) return
+      const cursor = mentionQuery.start + inserted.length
+      composer.focus()
+      composer.setSelectionRange(cursor, cursor)
+    })
   }
 
   function cancelMessageHold() {
@@ -235,6 +308,17 @@ export function ChatRoomPage({
     .reverse()
     .find((message) => message.senderId === session.participantId)?.id
   const connectedParticipants = participants.filter((participant) => participant.connected)
+  const mentionCandidates = mentionQuery
+    ? connectedParticipants
+        .filter(
+          (participant) =>
+            participant.id !== session.participantId &&
+            participant.displayName
+              .toLocaleLowerCase()
+              .startsWith(mentionQuery.query.trim().toLocaleLowerCase()),
+        )
+        .slice(0, 5)
+    : []
 
   return (
     <main className="chat-shell min-h-svh bg-[#0d100d] text-[#edeee8]">
@@ -325,6 +409,46 @@ export function ChatRoomPage({
         </div>
       </header>
 
+      <div className="chat-alert-stack" aria-live="polite">
+        {error && (
+          <p className="inline-error error-popup chat-error-popup" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="error-popup-dismiss"
+              aria-label="Dismiss alert"
+              onClick={onDismissError}
+            >
+              <X size={15} />
+            </button>
+          </p>
+        )}
+        {sendFailure && (
+          <div className="send-failure error-popup" role="alert">
+            <span>{sendFailure}</span>
+            <div className="send-failure-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                className="send-retry-button"
+                disabled={!connected || sendingMessage || !draft.trim()}
+                onClick={() => composerRef.current?.form?.requestSubmit()}
+              >
+                Try again
+              </Button>
+              <button
+                type="button"
+                className="error-popup-dismiss"
+                aria-label="Dismiss message warning"
+                onClick={onDismissSendFailure}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <Dialog.Root open={managePeopleOpen} onOpenChange={setManagePeopleOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="people-dialog-overlay fixed inset-0 z-50 bg-black/70" />
@@ -407,17 +531,6 @@ export function ChatRoomPage({
         </Dialog.Portal>
       </Dialog.Root>
 
-      {!connected &&
-        (!session.isOwner || pendingRoomEnd || graceSeconds === null) && (
-        <p className="connection-alert" role="alert">
-          <span>
-            {pendingRoomEnd
-              ? 'End room requested. It will close as soon as your connection returns.'
-              : 'Connection lost. Reconnecting to your room…'}
-          </span>
-        </p>
-      )}
-
       <AlertDialog.Root open={confirmClose} onOpenChange={setConfirmClose}>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="close-room-overlay fixed inset-0 z-50 bg-black/65" />
@@ -440,7 +553,8 @@ export function ChatRoomPage({
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
                 <Button
-                  className="end-room-confirm-button rounded-lg text-sm font-semibold"
+                variant={'destructive'}
+                  className="end-room-confirm-button rounded-lg text-sm font-semibold text-black"
                   onClick={onClose}
                 >
                   End room for everyone
@@ -456,7 +570,7 @@ export function ChatRoomPage({
           Invite code copied <Check size={14} />
         </div>
       )}
-      {welcomeVisible && welcomeName && (
+      {welcomeVisible && welcomeName && !roomNotice && (
         <div className="welcome-toast" role="status">
           <span className="profile-pill toast-avatar" aria-hidden="true">
             {firstNameInitial(welcomeName)}
@@ -468,18 +582,41 @@ export function ChatRoomPage({
         </div>
       )}
       {roomNotice && (
-        <div className="welcome-toast join-notice-toast" role="status" aria-live="polite">
+        <div
+          key={roomNotice.id}
+          className={`welcome-toast join-notice-toast room-notice-toast${roomNoticeLeaving ? ' notice-leaving' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
           <span className="profile-pill toast-avatar" aria-hidden="true">
             {firstNameInitial(roomNotice.displayName)}
           </span>
           <span className="welcome-toast-copy">
-            <strong>{roomNotice.displayName} joined the room</strong>
-            <small>Say hello and make them feel welcome.</small>
+            <strong>
+              {roomNotice.kind === 'mention'
+                ? `${roomNotice.displayName} mentioned you`
+                : `${roomNotice.displayName} joined the room`}
+            </strong>
+            <small>
+              {roomNotice.kind === 'mention'
+                ? 'Check the conversation to see what they said.'
+                : 'Say hello and make them feel welcome.'}
+            </small>
           </span>
         </div>
       )}
 
-      <section className="conversation overflow-y-auto" aria-label="Room conversation" aria-live="polite">
+      <section
+        ref={conversationRef}
+        className="conversation overflow-y-auto"
+        aria-label="Room conversation"
+        aria-live="polite"
+        onScroll={(event) => {
+          const element = event.currentTarget
+          shouldStickToBottomRef.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 80
+        }}
+      >
         {messages.length === 0 ? (
           <div className="empty-chat">
             <div className="empty-orbit">
@@ -517,6 +654,11 @@ export function ChatRoomPage({
                       <div className="avatar-spacer" />
                     ))}
                   <div className="message-content">
+                    {!grouped && (
+                      <div className={`message-author ${own ? 'message-author-own' : ''}`}>
+                        {own ? `${session.displayName} · You` : message.senderName}
+                      </div>
+                    )}
                     <div className="message-body-row">
                       <p
                         className="message-bubble"
@@ -546,7 +688,7 @@ export function ChatRoomPage({
                           holdTriggeredRef.current = false
                         }}
                       >
-                        {message.body}
+                        {renderMessageBody(message.body, participants)}
                       </p>
                     </div>
                     {(message.edited || (own && message.id === lastOwnMessageId)) && (
@@ -616,23 +758,16 @@ export function ChatRoomPage({
       </section>
 
       <div className="composer-area">
-        <div className="typing-line">
-          {typingLabel ? (
-            <span className="typing-dots" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-          ) : (
-            <span className={`online-dot ${connected ? '' : 'offline'}`} />
+        {!connected &&
+          (!session.isOwner || pendingRoomEnd || graceSeconds === null) && (
+            <p className="connection-alert" role="status" aria-live="polite">
+              <span>
+                {pendingRoomEnd
+                  ? 'End room requested. It will close as soon as your connection returns.'
+                  : 'Connection lost. Reconnecting to your room…'}
+              </span>
+            </p>
           )}
-          <span>
-            {typingLabel ??
-              (connected
-              ? 'Messages are limited to 20 every 10 seconds.'
-              : 'Reconnecting to your room…')}
-          </span>
-        </div>
         {graceSeconds !== null && (
           <div className="owner-grace-notice" role="status" aria-live="polite">
             <Timer size={17} aria-hidden="true" />
@@ -642,6 +777,20 @@ export function ChatRoomPage({
                 <b>{graceSeconds}s</b> remaining. The chat will be destroyed if the owner doesn’t reconnect.
               </span>
             </span>
+          </div>
+        )}
+        {(typingLabel || connected) && (
+          <div className="typing-line">
+            {typingLabel ? (
+              <span className="typing-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            ) : (
+              <span className="online-dot" />
+            )}
+            <span>{typingLabel ?? 'Messages are limited to 20 every 10 seconds.'}</span>
           </div>
         )}
         {editingMessageId && (
@@ -718,10 +867,39 @@ export function ChatRoomPage({
             onChange={(event) => {
               onDraftChange(event.target.value)
               setTyping(Boolean(event.target.value.trim()))
+              setMentionQuery(
+                getMentionQuery(event.target.value, event.currentTarget.selectionStart),
+              )
+              setSelectedMentionIndex(0)
               event.currentTarget.style.height = 'auto'
               event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 144)}px`
             }}
             onKeyDown={(event) => {
+              if (mentionCandidates.length > 0 && event.key === 'ArrowDown') {
+                event.preventDefault()
+                setSelectedMentionIndex((index) => (index + 1) % mentionCandidates.length)
+                return
+              }
+              if (mentionCandidates.length > 0 && event.key === 'ArrowUp') {
+                event.preventDefault()
+                setSelectedMentionIndex(
+                  (index) => (index - 1 + mentionCandidates.length) % mentionCandidates.length,
+                )
+                return
+              }
+              if (
+                mentionCandidates.length > 0 &&
+                (event.key === 'Enter' || event.key === 'Tab')
+              ) {
+                event.preventDefault()
+                insertMention(mentionCandidates[selectedMentionIndex] ?? mentionCandidates[0])
+                return
+              }
+              if (event.key === 'Escape' && mentionQuery) {
+                event.preventDefault()
+                setMentionQuery(null)
+                return
+              }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 setTyping(false)
@@ -745,28 +923,24 @@ export function ChatRoomPage({
             )}
           </Button>
         </form>
-        {sendFailure && (
-          <div className="send-failure error-popup" role="alert">
-            <span>{sendFailure}</span>
-            <div className="send-failure-actions">
-              <Button
-                type="button"
-                variant="ghost"
-                className="send-retry-button"
-                disabled={!connected || sendingMessage || !draft.trim()}
-                onClick={() => composerRef.current?.form?.requestSubmit()}
-              >
-                Try again
-              </Button>
+        {mentionCandidates.length > 0 && (
+          <div className="mention-suggestions" role="listbox" aria-label="Mention a participant">
+            {mentionCandidates.map((participant, index) => (
               <button
+                key={participant.id}
                 type="button"
-                className="error-popup-dismiss"
-                aria-label="Dismiss message warning"
-                onClick={onDismissSendFailure}
+                className={`mention-suggestion${index === selectedMentionIndex ? ' selected' : ''}`}
+                role="option"
+                aria-selected={index === selectedMentionIndex}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => insertMention(participant)}
               >
-                <X size={15} />
+                <span className="mention-suggestion-avatar" style={avatarColor(participant.id)}>
+                  {initials(participant.displayName)}
+                </span>
+                <span>{participant.displayName}</span>
               </button>
-            </div>
+            ))}
           </div>
         )}
         <div className="composer-foot">
@@ -777,14 +951,6 @@ export function ChatRoomPage({
             {draft.length}/1000
           </span>
         </div>
-        {error && (
-          <p className="inline-error error-popup chat-error-popup" role="alert">
-            <span>{error}</span>
-            <button type="button" className="error-popup-dismiss" aria-label="Dismiss alert" onClick={onDismissError}>
-              <X size={15} />
-            </button>
-          </p>
-        )}
       </div>
     </main>
   )

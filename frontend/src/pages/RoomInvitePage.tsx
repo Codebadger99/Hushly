@@ -69,7 +69,12 @@ export function RoomInvitePage({
   return (
     <SiteChrome home={false} onHome={onHome}>
       {isOwner && joinNotice && (
-        <div className="welcome-toast join-notice-toast" role="status" aria-live="polite">
+        <div
+          key={joinNotice.id}
+          className={`welcome-toast join-notice-toast${joinNotice.leaving ? ' notice-leaving' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
           <span className="profile-pill toast-avatar" aria-hidden="true">
             {firstNameInitial(joinNotice.displayName)}
           </span>
@@ -80,7 +85,7 @@ export function RoomInvitePage({
         </div>
       )}
       {error && error !== dismissedError && (
-        <p className="form-error error-popup flow-error-popup" role="alert">
+        <p className="form-error error-popup flow-error-popup invitation-error-popup" role="alert">
           <span>{error}</span>
           <button
             type="button"

@@ -13,6 +13,14 @@ const MAX_MESSAGES_PER_ROOM = 500;
 const NOT_FOUND = 'Room not found'; // one message for every kind of failure
 type RoomDestroyReason = 'owner-disconnected' | 'owner-ended' | 'room-inactive';
 
+function containsMention(body: string, displayName: string) {
+  const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `(^|[^\\p{L}\\p{N}_])@${escapedName}(?=$|[^\\p{L}\\p{N}_])`,
+    'iu',
+  ).test(body);
+}
+
 @Injectable()
 export class RoomsService {
   private rooms = new Map<string, Room>(); // room code -> room
@@ -169,6 +177,7 @@ export class RoomsService {
       inviteToken,
       name: name.trim(),
       ownerId: owner.id,
+      ownerReady: false,
       participants: new Map([[owner.id, owner]]),
       blockedParticipants: new Map(),
       typingParticipantIds: new Set(),
@@ -200,6 +209,10 @@ export class RoomsService {
     if (!identityHash) return { error: 'Could not verify this browser. Please refresh and try again.' };
     if (room.blockedParticipants.has(identityHash)) {
       return { error: 'This browser has been blocked from this room. Ask the owner to unblock you.' };
+    }
+    const owner = room.participants.get(room.ownerId);
+    if (!owner?.socketId || !room.ownerReady) {
+      return { waitingForOwner: true, waitRoom: room.code };
     }
     if (room.participants.size >= MAX_PARTICIPANTS_PER_ROOM) {
       return { error: 'This room is full. Ask the host to make space and try again.' };
@@ -240,6 +253,20 @@ export class RoomsService {
     const room = this.findRoom(code);
     if (!room) return { error: NOT_FOUND };
     return { roomName: room.name };
+  }
+
+  markOwnerReady(socketId: string) {
+    const code = this.socketIndex.get(socketId);
+    const room = code ? this.rooms.get(code) : undefined;
+    const owner = room && this.findParticipantBySocket(room, socketId);
+    if (!room || !owner?.isOwner) return { error: 'Not allowed' };
+    room.ownerReady = true;
+    return { ok: true, roomCode: room.code };
+  }
+
+  isOwnerReady(code: string) {
+    const room = this.findRoom(code);
+    return Boolean(room?.ownerReady && room.participants.get(room.ownerId)?.socketId);
   }
 
   reconnect(code: string, token: string, socketId: string, clientIdentity: unknown) {
@@ -303,6 +330,17 @@ export class RoomsService {
     return this.socketIndex.get(socketId);
   }
 
+  getRoomParticipants(code: string) {
+    const room = this.findRoom(code);
+    if (!room) return null;
+    return [...room.participants.values()].map((participant) => ({
+      id: participant.id,
+      displayName: participant.displayName,
+      isOwner: participant.isOwner,
+      connected: participant.socketId !== null,
+    }));
+  }
+
   getOwnerRoster(code: string) {
     const room = this.findRoom(code);
     if (!room) return null;
@@ -310,12 +348,7 @@ export class RoomsService {
     if (!owner?.socketId) return null;
     return {
       ownerSocketId: owner.socketId,
-      participants: [...room.participants.values()].map((participant) => ({
-        id: participant.id,
-        displayName: participant.displayName,
-        isOwner: participant.isOwner,
-        connected: participant.socketId !== null,
-      })),
+      participants: this.getRoomParticipants(code) ?? [],
       blockedParticipants: [...room.blockedParticipants.values()],
     };
   }
@@ -412,7 +445,16 @@ export class RoomsService {
     room.messages.push(message);
     if (room.messages.length > MAX_MESSAGES_PER_ROOM) room.messages.shift();
 
-    return { roomCode: room.code, message };
+    const mentionedParticipants = [...room.participants.values()]
+      .filter(
+        (participant) =>
+          participant.id !== sender.id &&
+          participant.socketId !== null &&
+          containsMention(message.body, participant.displayName),
+      )
+      .map(({ id, displayName, socketId }) => ({ id, displayName, socketId }));
+
+    return { roomCode: room.code, message, mentionedParticipants };
   }
 
   editMessage(socketId: string, messageId: string, body: string) {
@@ -504,7 +546,10 @@ export class RoomsService {
     participant.socketId = null;
     const stoppedTyping = room.typingParticipantIds.delete(participant.id);
 
-    if (participant.isOwner) this.startOwnerGrace(room);
+    if (participant.isOwner) {
+      room.ownerReady = false;
+      this.startOwnerGrace(room);
+    }
     if (this.connectedCount(room) === 0) this.startInactivityTimer(room);
     return {
       roomCode: room.code,

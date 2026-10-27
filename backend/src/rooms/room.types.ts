@@ -26,6 +26,7 @@ export interface Room {
   inviteToken: string;
   name: string;
   ownerId: string;
+  ownerReady: boolean;
   participants: Map<string, Participant>;
   blockedParticipants: Map<string, BlockedParticipant>;
   typingParticipantIds: Set<string>;

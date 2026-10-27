@@ -76,6 +76,16 @@ function readClientIdentity() {
   }
 }
 
+function humanizeRoomError(message: string | undefined, fallback: string) {
+  if (message === 'Room not found') {
+    return 'We couldn’t find that room. Check the 8-character code with your host and try again.'
+  }
+  if (message === 'Too many requests, slow down') {
+    return 'You’re trying a little too quickly. Wait a moment, then try again.'
+  }
+  return message || fallback
+}
+
 function isStoredSession(value: unknown): value is Session {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Partial<Session>
@@ -106,6 +116,24 @@ function PageLoading() {
   return (
     <main className="grid min-h-svh place-items-center bg-[#0d100d] text-sm text-[#92998d]">
       Making a little space…
+    </main>
+  )
+}
+
+function WaitingForOwnerPage({ onCancel }: { onCancel: () => void }) {
+  return (
+    <main className="waiting-owner-screen">
+      <section className="waiting-owner-card" aria-live="polite">
+        <span className="waiting-owner-spinner" aria-hidden="true" />
+        <p className="panel-eyebrow">ROOM NOT OPEN YET</p>
+        <h1>Waiting for the owner to join</h1>
+        <p>
+          The room will open for guests once the owner enters. Please keep this page open.
+        </p>
+        <button className="waiting-owner-cancel" type="button" onClick={onCancel}>
+          Back to invitation
+        </button>
+      </section>
     </main>
   )
 }
@@ -143,6 +171,7 @@ function App() {
   const [copied, setCopied] = useState(false)
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [waitingForOwner, setWaitingForOwner] = useState(false)
   const [connectedCount, setConnectedCount] = useState(initialSession ? 1 : 0)
   const [ownerGraceEndsAt, setOwnerGraceEndsAt] = useState<number | null>(null)
   const [pendingRoomEnd, setPendingRoomEnd] = useState(false)
@@ -153,12 +182,15 @@ function App() {
   const [participants, setParticipants] = useState<RoomParticipant[]>([])
   const [blockedParticipants, setBlockedParticipants] = useState<BlockedParticipant[]>([])
   const [roomNotices, setRoomNotices] = useState<RoomNotice[]>([])
+  const [leavingRoomNoticeId, setLeavingRoomNoticeId] = useState<number | null>(null)
   const socketRef = useRef<Socket | null>(null)
   const sendingMessageRef = useRef(false)
   const joinedSocketRef = useRef<string | null>(null)
   const roomNoticeSequenceRef = useRef(0)
   const ownerGraceDurationRef = useRef(30_000)
   const pendingRoomEndRef = useRef(false)
+  const waitingForOwnerRef = useRef(false)
+  const waitingRoomCleanupRef = useRef<(() => void) | null>(null)
 
   const roomCode = session?.roomCode
   const roomToken = session?.token
@@ -166,10 +198,15 @@ function App() {
 
   useEffect(() => {
     if (!roomNotice) return
-    const timer = window.setTimeout(() => {
+    const leaveTimer = window.setTimeout(() => setLeavingRoomNoticeId(roomNotice.id), 4700)
+    const removeTimer = window.setTimeout(() => {
       setRoomNotices((current) => current.filter((notice) => notice.id !== roomNotice.id))
+      setLeavingRoomNoticeId(null)
     }, 5000)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(leaveTimer)
+      window.clearTimeout(removeTimer)
+    }
   }, [roomNotice])
 
   useEffect(() => {
@@ -254,6 +291,11 @@ function App() {
           })
           return
         }
+        if (result.isOwner && screen === 'chat') {
+          socket.emit('room:owner:enter', {}, (readyResult: SocketResponse) => {
+            if (readyResult.error) setError(readyResult.error)
+          })
+        }
         const refreshedSession: Session = {
           roomCode: currentRoomCode,
           roomName,
@@ -292,7 +334,18 @@ function App() {
     function handleRoomNotice(notice: { displayName: string }) {
       if (typeof notice?.displayName !== 'string' || !notice.displayName.trim()) return
       const id = ++roomNoticeSequenceRef.current
-      setRoomNotices((current) => [...current, { id, displayName: notice.displayName }])
+      setRoomNotices((current) => [
+        ...current,
+        { id, displayName: notice.displayName, kind: 'joined' },
+      ])
+    }
+    function handleMentionNotice(notice: { senderName: string }) {
+      if (typeof notice?.senderName !== 'string' || !notice.senderName.trim()) return
+      const id = ++roomNoticeSequenceRef.current
+      setRoomNotices((current) => [
+        ...current,
+        { id, displayName: notice.senderName, kind: 'mention' },
+      ])
     }
     function handleRoomDestroyed(data?: {
       reason?: 'owner-disconnected' | 'owner-ended' | 'room-inactive'
@@ -333,6 +386,9 @@ function App() {
       setParticipants(data.participants)
       setBlockedParticipants(data.blockedParticipants)
     }
+    function handlePublicParticipants(data: { participants: RoomParticipant[] }) {
+      setParticipants(data.participants)
+    }
     function handleTyping(data: {
       participantId: string
       displayName: string
@@ -363,9 +419,11 @@ function App() {
     socket.on('message:updated', handleMessageUpdated)
     socket.on('message:deleted', handleMessageDeleted)
     socket.on('room:notice', handleRoomNotice)
+    socket.on('message:mention', handleMentionNotice)
     socket.on('room:destroyed', handleRoomDestroyed)
     socket.on('room:presence', handleRoomPresence)
     socket.on('room:participants', handleParticipants)
+    socket.on('room:participants:public', handlePublicParticipants)
     socket.on('room:typing', handleTyping)
     socket.on('room:blocked', handleBlocked)
     socket.emit('room:state:request')
@@ -384,9 +442,11 @@ function App() {
       socket.off('message:updated', handleMessageUpdated)
       socket.off('message:deleted', handleMessageDeleted)
       socket.off('room:notice', handleRoomNotice)
+      socket.off('message:mention', handleMentionNotice)
       socket.off('room:destroyed', handleRoomDestroyed)
       socket.off('room:presence', handleRoomPresence)
       socket.off('room:participants', handleParticipants)
+      socket.off('room:participants:public', handlePublicParticipants)
       socket.off('room:typing', handleTyping)
       socket.off('room:blocked', handleBlocked)
     }
@@ -415,7 +475,7 @@ function App() {
         if (cancelled) return
         setInviteLoading(false)
         if (result.error || !result.roomName) {
-          setInviteError(result.error || 'This invitation is no longer available.')
+          setInviteError(humanizeRoomError(result.error, 'This invitation is no longer available.'))
           socket.disconnect()
           return
         }
@@ -449,6 +509,10 @@ function App() {
     setError('')
     setConnecting(true)
     setConnected(false)
+    waitingRoomCleanupRef.current?.()
+    waitingRoomCleanupRef.current = null
+    waitingForOwnerRef.current = false
+    setWaitingForOwner(false)
     if (mode === 'join' && !ROOM_CODE_PATTERN.test(inviteCode.trim().toUpperCase())) {
       setError('Enter the 8-character room code to join.')
       setConnecting(false)
@@ -464,12 +528,49 @@ function App() {
     socketRef.current = socket
 
     socket.once('connect', () => {
-      const eventName = mode === 'create' ? 'room:create' : 'room:join'
       const payload =
         mode === 'create'
           ? { name: roomName, clientIdentity }
           : { code: inviteCode.trim(), clientIdentity }
-      socket.emit(eventName, payload, (result: SocketResponse) => {
+      let ownerReadySignalReceived = false
+
+      const cleanupWaitingRoom = () => {
+        socket.off('room:owner:ready', handleOwnerReady)
+        socket.off('room:destroyed', handleWaitingRoomDestroyed)
+        socket.off('connect', handleWaitingReconnect)
+        if (waitingRoomCleanupRef.current === cleanupWaitingRoom) {
+          waitingRoomCleanupRef.current = null
+        }
+      }
+
+      const handleWaitingRoomDestroyed = (data?: {
+        reason?: 'owner-disconnected' | 'owner-ended' | 'room-inactive'
+      }) => {
+        if (!waitingForOwnerRef.current) return
+        cleanupWaitingRoom()
+        waitingForOwnerRef.current = false
+        setWaitingForOwner(false)
+        setConnecting(false)
+        setError(
+          data?.reason === 'owner-disconnected'
+            ? 'The owner did not reconnect in time, so this room was closed.'
+            : 'This room closed before the owner could let you in.',
+        )
+        socket.disconnect()
+        socketRef.current = null
+      }
+
+      const handleJoinResult = (result: SocketResponse) => {
+        if (result.waitingForOwner) {
+          waitingForOwnerRef.current = true
+          setWaitingForOwner(true)
+          setConnecting(false)
+          if (result.ownerReady || ownerReadySignalReceived) {
+            ownerReadySignalReceived = false
+            requestJoin()
+          }
+          return
+        }
         if (
           result.error ||
           !result.roomCode ||
@@ -479,12 +580,23 @@ function App() {
           !result.participantId ||
           !result.displayName
         ) {
-          setError(result.error || 'Could not enter that room. Check the code and try again.')
+          cleanupWaitingRoom()
+          waitingForOwnerRef.current = false
+          setWaitingForOwner(false)
+          setError(
+            humanizeRoomError(
+              result.error,
+              'We couldn’t join that room. Check the code and try again.',
+            ),
+          )
           setConnecting(false)
           socket.disconnect()
           socketRef.current = null
           return
         }
+        cleanupWaitingRoom()
+        waitingForOwnerRef.current = false
+        setWaitingForOwner(false)
         const nextSession: Session = {
           roomCode: result.roomCode,
           roomName: result.roomName,
@@ -509,7 +621,6 @@ function App() {
         setParticipants([])
         setBlockedParticipants([])
         setRoomNotices([])
-        setInviteCode(nextSession.roomCode)
         sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession))
         setWelcomeName(nextSession.displayName)
         setInviteRoomName(nextSession.roomName)
@@ -523,14 +634,49 @@ function App() {
         setConnected(true)
         setConnecting(false)
         setScreen(mode === 'create' ? 'invite' : 'chat')
-      })
+      }
+
+      const requestJoin = () => {
+        socket.emit('room:join', payload, handleJoinResult)
+      }
+      const handleOwnerReady = () => {
+        if (waitingForOwnerRef.current) requestJoin()
+        else ownerReadySignalReceived = true
+      }
+      const handleWaitingReconnect = () => {
+        if (waitingForOwnerRef.current) requestJoin()
+      }
+
+      if (mode === 'join') {
+        socket.on('room:owner:ready', handleOwnerReady)
+        socket.on('room:destroyed', handleWaitingRoomDestroyed)
+        socket.on('connect', handleWaitingReconnect)
+        waitingRoomCleanupRef.current = cleanupWaitingRoom
+        requestJoin()
+      } else {
+        socket.emit('room:create', payload, handleJoinResult)
+      }
     })
     socket.once('connect_error', () => {
-      setError('Could not reach Hushly right now. Make sure the server is running, then try again.')
+      waitingRoomCleanupRef.current?.()
+      waitingRoomCleanupRef.current = null
+      waitingForOwnerRef.current = false
+      setWaitingForOwner(false)
+      setError('We couldn’t connect to Hushly. Check your internet connection and try again.')
       setConnecting(false)
       socket.disconnect()
       socketRef.current = null
     })
+  }
+
+  function cancelOwnerWait() {
+    waitingRoomCleanupRef.current?.()
+    waitingRoomCleanupRef.current = null
+    waitingForOwnerRef.current = false
+    setWaitingForOwner(false)
+    setError('')
+    socketRef.current?.disconnect()
+    socketRef.current = null
   }
 
   function sendMessage(event: FormEvent<HTMLFormElement>) {
@@ -560,7 +706,7 @@ function App() {
           setSendFailure(`${result.error} Try sending your message again.`)
           return
         }
-        setDraft((current) => (current === body ? '' : current))
+        setDraft((current) => (current.trim() === body ? '' : current))
         setSendFailure(null)
         setError('')
       },
@@ -667,7 +813,7 @@ function App() {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
-      setError('Clipboard access is unavailable. You can select and copy the invite code.')
+      setError('Clipboard isn’t available. Select and copy the invite code instead.')
     }
   }
 
@@ -697,7 +843,19 @@ function App() {
   }
 
   function enterCreatedRoom() {
-    setScreen('chat')
+    const socket = socketRef.current
+    if (!session?.isOwner || !socket?.connected) {
+      setError('Reconnect before entering the room so guests can join.')
+      return
+    }
+    socket.emit('room:owner:enter', {}, (result: SocketResponse) => {
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setError('')
+      setScreen('chat')
+    })
   }
 
   function enterManualJoin() {
@@ -715,6 +873,7 @@ function App() {
       window.history.replaceState({}, '', window.location.pathname)
     }
     if (nextScreen === 'create') setRoomName('')
+    if (nextScreen === 'join') setInviteCode('')
     setScreen(nextScreen)
     setError('')
   }
@@ -736,6 +895,7 @@ function App() {
           pendingRoomEnd={pendingRoomEnd}
           welcomeName={welcomeName}
           roomNotice={roomNotice}
+          roomNoticeLeaving={roomNotice?.id === leavingRoomNoticeId}
           typingParticipants={Object.values(typingParticipants)}
           participants={participants}
           blockedParticipants={blockedParticipants}
@@ -754,6 +914,10 @@ function App() {
         />
       </Suspense>
     )
+  }
+
+  if (waitingForOwner) {
+    return <WaitingForOwnerPage onCancel={cancelOwnerWait} />
   }
 
   if (screen === 'invite') {
@@ -777,7 +941,11 @@ function App() {
           connecting={connecting}
           error={inviteError || error}
           feedback={shareFeedback}
-          joinNotice={session?.isOwner ? roomNotice : null}
+          joinNotice={
+            session?.isOwner && roomNotice?.kind === 'joined'
+              ? { ...roomNotice, leaving: roomNotice.id === leavingRoomNoticeId }
+              : null
+          }
           onCopyCode={copyShareCode}
           onCopyLink={copyInviteLink}
           onEnterRoom={enterCreatedRoom}

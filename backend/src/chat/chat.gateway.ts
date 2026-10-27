@@ -30,15 +30,23 @@ export class ChatGateway
     // When a room is destroyed: tell everyone, then disconnect them
     this.roomsService.setDestroyHandler((code, reason) => {
       this.server.to(code).emit('room:destroyed', { reason });
+      this.server.to(this.waitingRoom(code)).emit('room:destroyed', { reason });
       // Let room notifications and Socket.IO acknowledgements flush before closing sockets.
       setTimeout(() => this.server.in(code).disconnectSockets(true), 0);
     });
+  }
+
+  private waitingRoom(code: string) {
+    return `room-wait:${code}`;
   }
 
   private publishRoomState(code: string) {
     const presence = this.roomsService.getRoomPresence(code);
     if (!presence) return;
     this.server.to(code).emit('room:presence', presence);
+    this.server.to(code).emit('room:participants:public', {
+      participants: this.roomsService.getRoomParticipants(code) ?? [],
+    });
 
     const ownerRoster = this.roomsService.getOwnerRoster(code);
     if (ownerRoster) {
@@ -114,7 +122,15 @@ export class ChatGateway
     if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000)) return TOO_MANY;
 
    const result = this.roomsService.joinRoom(data?.code, client.id, data?.clientIdentity);
+   if (result.waitingForOwner && result.waitRoom) {
+     await client.join(this.waitingRoom(result.waitRoom));
+     return {
+       waitingForOwner: true,
+       ...(this.roomsService.isOwnerReady(result.waitRoom) ? { ownerReady: true } : {}),
+     };
+   }
    if (typeof result.roomCode === 'string') {
+     await client.leave(this.waitingRoom(result.roomCode));
      await client.join(result.roomCode);
      this.publishRoomState(result.roomCode);
      client.to(result.roomCode).emit('room:notice', {
@@ -144,6 +160,15 @@ export class ChatGateway
       return TOO_MANY;
     }
     return this.roomsService.previewInvite(data?.token);
+  }
+
+  @SubscribeMessage('room:owner:enter')
+  handleOwnerEnter(@ConnectedSocket() client: Socket) {
+    const result = this.roomsService.markOwnerReady(client.id);
+    if (result.roomCode) {
+      this.server.to(this.waitingRoom(result.roomCode)).emit('room:owner:ready');
+    }
+    return result;
   }
 
   @SubscribeMessage('room:reconnect')
@@ -178,6 +203,13 @@ export class ChatGateway
     if ('error' in result) return result;
 
     this.server.to(result.roomCode).emit('message:new', result.message);
+    for (const participant of result.mentionedParticipants) {
+      if (!participant.socketId) continue;
+      this.server.to(participant.socketId).emit('message:mention', {
+        senderName: result.message.senderName,
+        messageId: result.message.id,
+      });
+    }
     return { ok: true };
   }
 

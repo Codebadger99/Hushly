@@ -6,6 +6,7 @@ import { RoomsService } from './rooms.service';
 
 const OWNER_IDENTITY = 'a0000000-0000-4000-8000-000000000001';
 const GUEST_IDENTITY = 'b0000000-0000-4000-8000-000000000002';
+const SECOND_GUEST_IDENTITY = 'c0000000-0000-4000-8000-000000000003';
 
 describe('RoomsService', () => {
   let service: RoomsService;
@@ -48,6 +49,7 @@ describe('RoomsService', () => {
     if (!('roomCode' in owner) || !('participantId' in owner)) {
       throw new Error('Expected the room to be created');
     }
+    service.markOwnerReady('owner-socket');
     const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
     if (!('participantId' in guest)) throw new Error('Expected the guest to join');
     service.updateTyping('guest-socket', true);
@@ -76,6 +78,7 @@ describe('RoomsService', () => {
   it('tracks live participants and owner-only roster data', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
     const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
     if (!('participantId' in guest)) throw new Error('Expected the guest to join');
 
@@ -83,12 +86,14 @@ describe('RoomsService', () => {
       connectedCount: 2,
       ownerGraceEndsAt: null,
     });
+    expect(service.getRoomParticipants(owner.roomCode)).toHaveLength(2);
     expect(service.getOwnerRoster(owner.roomCode)?.participants).toHaveLength(2);
   });
 
   it('caps rooms at 100 participants', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
 
     for (let index = 1; index < 100; index += 1) {
       const identity = `b0000000-0000-4000-8000-${index.toString().padStart(12, '0')}`;
@@ -111,6 +116,7 @@ describe('RoomsService', () => {
   it('previews a room by invite code without exposing its code', () => {
     const owner = service.createRoom('Midnight lounge', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
 
     expect(service.previewRoom(owner.roomCode)).toEqual({
       roomName: 'Midnight lounge',
@@ -123,6 +129,7 @@ describe('RoomsService', () => {
     if (!('roomCode' in owner) || !('inviteToken' in owner)) {
       throw new Error('Expected the room to be created');
     }
+    service.markOwnerReady('owner-socket');
 
     expect(owner.inviteToken).not.toBe(owner.roomCode);
     expect(service.previewInvite(owner.inviteToken)).toEqual({
@@ -139,6 +146,7 @@ describe('RoomsService', () => {
   it('reports typing status only when a participant changes typing state', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
     const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
     if (!('participantId' in guest)) throw new Error('Expected the guest to join');
 
@@ -153,9 +161,42 @@ describe('RoomsService', () => {
     });
   });
 
+  it('identifies active participants mentioned by their exact display name', () => {
+    const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner) || !('participantId' in owner)) {
+      throw new Error('Expected the room to be created');
+    }
+    service.markOwnerReady('owner-socket');
+    const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
+    if (!('participantId' in guest)) throw new Error('Expected the guest to join');
+
+    const sent = service.sendMessage(
+      owner.roomCode,
+      'guest-socket',
+      `Hello @${owner.displayName}!`,
+    );
+    if (!('message' in sent)) throw new Error('Expected the message to be sent');
+    expect(sent.mentionedParticipants).toEqual([
+      {
+        id: owner.participantId,
+        displayName: owner.displayName,
+        socketId: 'owner-socket',
+      },
+    ]);
+
+    const partialMatch = service.sendMessage(
+      owner.roomCode,
+      'guest-socket',
+      `Hello @${owner.displayName}x`,
+    );
+    if (!('message' in partialMatch)) throw new Error('Expected the message to be sent');
+    expect(partialMatch.mentionedParticipants).toEqual([]);
+  });
+
   it('lets message authors edit and owners delete messages without leaving a tombstone', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
     const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
     if (!('participantId' in guest)) throw new Error('Expected the guest to join');
     const sent = service.sendMessage(owner.roomCode, 'guest-socket', 'Original message');
@@ -196,6 +237,7 @@ describe('RoomsService', () => {
   it('prevents participants from editing or deleting someone else’s messages', () => {
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
     const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
     if (!('participantId' in guest)) throw new Error('Expected the guest to join');
     const sent = service.sendMessage(owner.roomCode, 'owner-socket', 'Owner message');
@@ -222,10 +264,47 @@ describe('RoomsService', () => {
     );
   });
 
+  it('holds guests until the owner enters and after they reconnect', () => {
+    jest.useFakeTimers();
+    const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
+    if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+
+    expect(service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY)).toMatchObject({
+      waitingForOwner: true,
+    });
+    service.markOwnerReady('owner-socket');
+    expect(service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY)).toHaveProperty(
+      'participantId',
+    );
+
+    service.handleDisconnect('owner-socket');
+
+    expect(service.joinRoom(owner.roomCode, 'guest-retry', SECOND_GUEST_IDENTITY)).toEqual({
+      waitingForOwner: true,
+      waitRoom: owner.roomCode,
+    });
+
+    const reconnected = service.reconnect(
+      owner.roomCode,
+      owner.token,
+      'owner-reconnected',
+      OWNER_IDENTITY,
+    );
+    expect(reconnected).toHaveProperty('isOwner', true);
+    expect(service.joinRoom(owner.roomCode, 'guest-retry', SECOND_GUEST_IDENTITY)).toMatchObject({
+      waitingForOwner: true,
+    });
+    service.markOwnerReady('owner-reconnected');
+    expect(service.joinRoom(owner.roomCode, 'guest-retry', SECOND_GUEST_IDENTITY)).toHaveProperty(
+      'participantId',
+    );
+  });
+
   it('destroys the room and its contents when the owner does not reconnect', () => {
     jest.useFakeTimers();
     const owner = service.createRoom('A room', 'owner-socket', OWNER_IDENTITY);
     if (!('roomCode' in owner)) throw new Error('Expected the room to be created');
+    service.markOwnerReady('owner-socket');
     const guest = service.joinRoom(owner.roomCode, 'guest-socket', GUEST_IDENTITY);
     if (!('participantId' in guest)) throw new Error('Expected the guest to join');
     service.sendMessage(owner.roomCode, 'guest-socket', 'Room message');

@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { ArrowRight, ArrowUpRight, HeartHandshake, Ticket, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, ArrowUpRight, HeartHandshake, Ticket, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SiteChrome } from '@/components/site/SiteChrome'
 import type { FlowMode, Screen } from '@/types/hushly'
@@ -70,6 +70,15 @@ export function ServerFlowPage({
 
   return (
     <SiteChrome home={false} onHome={() => onNavigate('home')}>
+      {error && (
+        <p className="form-error error-popup flow-error-popup flow-error-banner" role="alert">
+          <AlertTriangle size={17} aria-hidden="true" />
+          <span>{error}</span>
+          <button type="button" className="error-popup-dismiss" aria-label="Dismiss alert" onClick={onDismissError}>
+            <X size={15} />
+          </button>
+        </p>
+      )}
       <section
         className={`flow-layout ${creating ? 'create-layout' : 'join-layout'} mx-auto grid flex-1 items-center`}
       >
@@ -206,14 +215,6 @@ export function ServerFlowPage({
             <p className="rate-limit-note">
               Room requests are limited to help keep Hushly safe.
             </p>
-            {error && (
-              <p className="form-error error-popup flow-error-popup" role="alert">
-                <span>{error}</span>
-                <button type="button" className="error-popup-dismiss" aria-label="Dismiss alert" onClick={onDismissError}>
-                  <X size={15} />
-                </button>
-              </p>
-            )}
           </form>
           <p className="switch-flow">
             {creating ? 'Already have a code?' : 'Want to start a room?'}{' '}
