@@ -37,8 +37,8 @@ export class RoomsService {
     private tokens: TokenService,
   ) {
     this.inactivityMs =
-      Number(config.get('ROOM_INACTIVITY_TIMEOUT_MS')) || 900000;
-    this.ownerGraceMs = Number(config.get('OWNER_GRACE_MS')) || 30000;
+      Number(config.get('ROOM_INACTIVITY_TIMEOUT_MS'));
+    this.ownerGraceMs = Number(config.get('OWNER_GRACE_MS'));
   }
 
   previewInvite(token: string) {
