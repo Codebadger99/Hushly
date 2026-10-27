@@ -1,19 +1,29 @@
-import { ArrowUpRight, HeartHandshake, Hourglass, Plus, Users, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { BlurFade } from '@/components/ui/blur-fade'
-import { SiteChrome } from '@/components/site/SiteChrome'
-import Logo from '../../public/Motion · floating spirit.png'
+import {
+  ArrowUpRight,
+  HeartHandshake,
+  Hourglass,
+  Plus,
+  Users,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BlurFade } from "@/components/ui/blur-fade";
+import { SiteChrome } from "@/components/site/SiteChrome";
+import Logo from "../../public/Motion · floating spirit.png";
 
 type LandingPageProps = {
-  onJoin: () => void
-  onCreate: () => void
-  roomClosureNotice: string
-  onDismissRoomClosure: () => void
-}
+  onJoin: () => void;
+  onCreate: () => void;
+  roomClosureNotice: string;
+  onDismissRoomClosure: () => void;
+};
 
 function LandingIllustration() {
   return (
-    <div className="hero-art mx-auto grid w-full place-items-center" aria-label="Hushly ghost mascot illustration">
+    <div
+      className="hero-art mx-auto grid w-full place-items-center"
+      aria-label="Hushly ghost mascot illustration"
+    >
       <div className="orbit orbit-one" />
       <div className="orbit orbit-two" />
       <div className="orbit orbit-three" />
@@ -31,7 +41,7 @@ function LandingIllustration() {
       </div>
       <span className="art-caption">A NEW ALIAS. A REAL CONNECTION.</span>
     </div>
-  )
+  );
 }
 
 export function LandingPage({
@@ -41,7 +51,10 @@ export function LandingPage({
   onDismissRoomClosure,
 }: LandingPageProps) {
   return (
-    <SiteChrome home onHome={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+    <SiteChrome
+      home
+      onHome={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+    >
       {roomClosureNotice && (
         <div className="error-popup room-closed-popup" role="alert">
           <span>{roomClosureNotice}</span>
@@ -66,8 +79,8 @@ export function LandingPage({
             <span>More you.</span>
           </h1>
           <p className="hero-description">
-            Drop the profile. Pick a temporary alias. Make a server, share a code, and see where the
-            conversation goes.
+            Drop the profile. Pick a temporary alias. Make a server, share a
+            code, and see where the conversation goes.
           </p>
           <div className="hero-buttons flex flex-col gap-2.5 sm:flex-row">
             <Button
@@ -84,7 +97,9 @@ export function LandingPage({
               Create server <Plus className="text-[#adb3a7]" size={18} />
             </Button>
           </div>
-          <p className="privacy-note">No account. No follower count. Just show up.</p>
+          <p className="privacy-note">
+            No account. No follower count. Just show up.
+          </p>
         </div>
         <LandingIllustration />
       </section>
@@ -120,9 +135,10 @@ export function LandingPage({
           </div>
         </div>
         <p className="value-quote">
-          For the late-night thoughts, the niche obsessions, the “you had to be there.”
+          For the late-night thoughts, the niche obsessions, the “you had to be
+          there.”
         </p>
       </section>
     </SiteChrome>
-  )
+  );
 }

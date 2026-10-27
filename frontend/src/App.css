@@ -1327,8 +1327,7 @@ textarea:focus-visible {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(ellipse at 50% 35%, #20291b 0, transparent 48%),
-    #0d100d;
+    radial-gradient(ellipse at 50% 35%, #20291b 0, transparent 48%), #0d100d;
   color: #edeee8;
 }
 .waiting-owner-card {

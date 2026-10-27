@@ -59,7 +59,8 @@ export class ChatGateway
 
   @SubscribeMessage('room:state:request')
   handleRoomStateRequest(@ConnectedSocket() client: Socket) {
-    if (!this.rateLimit.allow(`state:${client.id}`, 30, 60_000)) return TOO_MANY;
+    if (!this.rateLimit.allow(`state:${client.id}`, 30, 60_000))
+      return TOO_MANY;
     const code = this.roomsService.getParticipantRoomCode(client.id);
     if (!code) return { error: 'Room not found' };
     this.publishRoomState(code);
@@ -87,7 +88,7 @@ export class ChatGateway
     this.publishRoomState(result.roomCode);
   }
 
-   private ip(client: Socket): string {
+  private ip(client: Socket): string {
     if (process.env.TRUST_PROXY === 'true') {
       const forwarded = client.handshake.headers['x-forwarded-for'];
       if (typeof forwarded === 'string') {
@@ -97,20 +98,25 @@ export class ChatGateway
     }
     return client.handshake.address;
   }
-  
+
   @SubscribeMessage('room:create')
   async handleCreate(
     @MessageBody() data: { name: string; clientIdentity: string },
     @ConnectedSocket() client: Socket,
   ) {
-    if (!this.rateLimit.allow(`create:${this.ip(client)}`, 5, 60_000)) return TOO_MANY;
+    if (!this.rateLimit.allow(`create:${this.ip(client)}`, 5, 60_000))
+      return TOO_MANY;
 
-   const result = this.roomsService.createRoom(data?.name, client.id, data?.clientIdentity);
-   if (typeof result.roomCode === 'string') {
-     await client.join(result.roomCode);
-     this.publishRoomState(result.roomCode);
-   }
-   return result;
+    const result = this.roomsService.createRoom(
+      data?.name,
+      client.id,
+      data?.clientIdentity,
+    );
+    if (typeof result.roomCode === 'string') {
+      await client.join(result.roomCode);
+      this.publishRoomState(result.roomCode);
+    }
+    return result;
   }
 
   @SubscribeMessage('room:join')
@@ -119,24 +125,31 @@ export class ChatGateway
     @ConnectedSocket() client: Socket,
   ) {
     // Limits code guessing
-    if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000)) return TOO_MANY;
+    if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000))
+      return TOO_MANY;
 
-   const result = this.roomsService.joinRoom(data?.code, client.id, data?.clientIdentity);
-   if (result.waitingForOwner && result.waitRoom) {
-     await client.join(this.waitingRoom(result.waitRoom));
-     return {
-       waitingForOwner: true,
-       ...(this.roomsService.isOwnerReady(result.waitRoom) ? { ownerReady: true } : {}),
-     };
-   }
-   if (typeof result.roomCode === 'string') {
-     await client.leave(this.waitingRoom(result.roomCode));
-     await client.join(result.roomCode);
-     this.publishRoomState(result.roomCode);
-     client.to(result.roomCode).emit('room:notice', {
-       displayName: result.displayName,
-     });
-   }
+    const result = this.roomsService.joinRoom(
+      data?.code,
+      client.id,
+      data?.clientIdentity,
+    );
+    if (result.waitingForOwner && result.waitRoom) {
+      await client.join(this.waitingRoom(result.waitRoom));
+      return {
+        waitingForOwner: true,
+        ...(this.roomsService.isOwnerReady(result.waitRoom)
+          ? { ownerReady: true }
+          : {}),
+      };
+    }
+    if (typeof result.roomCode === 'string') {
+      await client.leave(this.waitingRoom(result.roomCode));
+      await client.join(result.roomCode);
+      this.publishRoomState(result.roomCode);
+      client.to(result.roomCode).emit('room:notice', {
+        displayName: result.displayName,
+      });
+    }
     return result;
   }
 
@@ -166,28 +179,32 @@ export class ChatGateway
   handleOwnerEnter(@ConnectedSocket() client: Socket) {
     const result = this.roomsService.markOwnerReady(client.id);
     if (result.roomCode) {
-      this.server.to(this.waitingRoom(result.roomCode)).emit('room:owner:ready');
+      this.server
+        .to(this.waitingRoom(result.roomCode))
+        .emit('room:owner:ready');
     }
     return result;
   }
 
   @SubscribeMessage('room:reconnect')
   async handleReconnect(
-    @MessageBody() data: { code: string; token: string; clientIdentity: string },
+    @MessageBody()
+    data: { code: string; token: string; clientIdentity: string },
     @ConnectedSocket() client: Socket,
   ) {
-    if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000)) return TOO_MANY;
+    if (!this.rateLimit.allow(`code:${this.ip(client)}`, 10, 60_000))
+      return TOO_MANY;
 
-   const result = this.roomsService.reconnect(
-     data?.code,
-     data?.token,
-     client.id,
-     data?.clientIdentity,
-   );
-   if ('roomCode' in result && typeof result.roomCode === 'string') {
-     await client.join(result.roomCode);
-     this.publishRoomState(result.roomCode);
-   }
+    const result = this.roomsService.reconnect(
+      data?.code,
+      data?.token,
+      client.id,
+      data?.clientIdentity,
+    );
+    if ('roomCode' in result && typeof result.roomCode === 'string') {
+      await client.join(result.roomCode);
+      this.publishRoomState(result.roomCode);
+    }
     return result;
   }
 
@@ -199,7 +216,11 @@ export class ChatGateway
     if (!this.rateLimit.allow(`msg:${client.id}`, 20, 10_000)) return TOO_MANY;
 
     this.publishTypingStop(client);
-    const result = this.roomsService.sendMessage(data?.code, client.id, data?.body);
+    const result = this.roomsService.sendMessage(
+      data?.code,
+      client.id,
+      data?.body,
+    );
     if ('error' in result) return result;
 
     this.server.to(result.roomCode).emit('message:new', result.message);
@@ -250,8 +271,10 @@ export class ChatGateway
     @MessageBody() data: { isTyping: boolean },
     @ConnectedSocket() client: Socket,
   ) {
-    if (typeof data?.isTyping !== 'boolean') return { error: 'Invalid typing state' };
-    if (!this.rateLimit.allow(`typing:${client.id}`, 30, 10_000)) return TOO_MANY;
+    if (typeof data?.isTyping !== 'boolean')
+      return { error: 'Invalid typing state' };
+    if (!this.rateLimit.allow(`typing:${client.id}`, 30, 10_000))
+      return TOO_MANY;
 
     const result = this.roomsService.updateTyping(client.id, data.isTyping);
     if (!result || 'error' in result) return result ?? { ok: true };
@@ -278,8 +301,12 @@ export class ChatGateway
     @MessageBody() data: { participantId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    if (!this.rateLimit.allow(`moderation:${client.id}`, 20, 60_000)) return TOO_MANY;
-    const result = this.roomsService.blockParticipant(client.id, data?.participantId);
+    if (!this.rateLimit.allow(`moderation:${client.id}`, 20, 60_000))
+      return TOO_MANY;
+    const result = this.roomsService.blockParticipant(
+      client.id,
+      data?.participantId,
+    );
     if ('error' in result) return result;
 
     result.stoppedTyping.forEach((participant) => {
@@ -301,8 +328,12 @@ export class ChatGateway
     @MessageBody() data: { blockedId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    if (!this.rateLimit.allow(`moderation:${client.id}`, 20, 60_000)) return TOO_MANY;
-    const result = this.roomsService.unblockParticipant(client.id, data?.blockedId);
+    if (!this.rateLimit.allow(`moderation:${client.id}`, 20, 60_000))
+      return TOO_MANY;
+    const result = this.roomsService.unblockParticipant(
+      client.id,
+      data?.blockedId,
+    );
     if ('error' in result) return result;
     this.publishRoomState(result.roomCode);
     return { ok: true };
@@ -321,7 +352,8 @@ export class ChatGateway
 
   @SubscribeMessage('room:destroy')
   handleDestroy(@ConnectedSocket() client: Socket) {
-    if (!this.rateLimit.allow(`destroy:${client.id}`, 3, 60_000)) return TOO_MANY;
+    if (!this.rateLimit.allow(`destroy:${client.id}`, 3, 60_000))
+      return TOO_MANY;
     return this.roomsService.destroyRoom(client.id);
   }
 }

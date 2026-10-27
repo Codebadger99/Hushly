@@ -1,30 +1,30 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Check, Copy, Ticket, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { SiteChrome } from '@/components/site/SiteChrome'
-import { firstNameInitial, type RoomNotice } from '@/types/hushly'
-import Logo from '../../public/Spirit seal.png'
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Check, Copy, Ticket, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SiteChrome } from "@/components/site/SiteChrome";
+import { firstNameInitial, type RoomNotice } from "@/types/hushly";
+import Logo from "../../public/Spirit seal.png";
 
 type RoomInvitePageProps = {
-  isOwner: boolean
-  roomName: string
-  roomCode?: string
-  inviteLink?: string
-  invitationCode?: string
-  inviteCode: string
-  onInviteCodeChange: (value: string) => void
-  loading?: boolean
-  connecting?: boolean
-  error?: string
-  feedback?: string
-  joinNotice?: RoomNotice | null
-  onCopyCode?: () => void
-  onCopyLink?: () => void
-  onEnterRoom?: () => void
-  onJoinRoom?: () => void
-  onManualJoin?: () => void
-  onHome: () => void
-}
+  isOwner: boolean;
+  roomName: string;
+  roomCode?: string;
+  inviteLink?: string;
+  invitationCode?: string;
+  inviteCode: string;
+  onInviteCodeChange: (value: string) => void;
+  loading?: boolean;
+  connecting?: boolean;
+  error?: string;
+  feedback?: string;
+  joinNotice?: RoomNotice | null;
+  onCopyCode?: () => void;
+  onCopyLink?: () => void;
+  onEnterRoom?: () => void;
+  onJoinRoom?: () => void;
+  onManualJoin?: () => void;
+  onHome: () => void;
+};
 
 export function RoomInvitePage({
   isOwner,
@@ -36,8 +36,8 @@ export function RoomInvitePage({
   onInviteCodeChange,
   loading = false,
   connecting = false,
-  error = '',
-  feedback = '',
+  error = "",
+  feedback = "",
   joinNotice = null,
   onCopyCode,
   onCopyLink,
@@ -46,32 +46,37 @@ export function RoomInvitePage({
   onManualJoin,
   onHome,
 }: RoomInvitePageProps) {
-  const displayName = roomName || (loading ? 'Finding your room…' : 'A little space')
-  const spiritRef = useRef<HTMLImageElement>(null)
-  const [dismissedError, setDismissedError] = useState('')
+  const displayName =
+    roomName || (loading ? "Finding your room…" : "A little space");
+  const spiritRef = useRef<HTMLImageElement>(null);
+  const [dismissedError, setDismissedError] = useState("");
 
   useEffect(() => {
-    const spirit = spiritRef.current
-    if (!spirit || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const spirit = spiritRef.current;
+    if (
+      !spirit ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
 
     const animation = spirit.animate(
       [
-        { transform: 'translateY(0) rotate(-2deg)' },
-        { transform: 'translateY(-8px) rotate(2deg)' },
-        { transform: 'translateY(0) rotate(-2deg)' },
+        { transform: "translateY(0) rotate(-2deg)" },
+        { transform: "translateY(-8px) rotate(2deg)" },
+        { transform: "translateY(0) rotate(-2deg)" },
       ],
-      { duration: 2800, easing: 'ease-in-out', iterations: Infinity },
-    )
+      { duration: 2800, easing: "ease-in-out", iterations: Infinity },
+    );
 
-    return () => animation.cancel()
-  }, [])
+    return () => animation.cancel();
+  }, []);
 
   return (
     <SiteChrome home={false} onHome={onHome}>
       {isOwner && joinNotice && (
         <div
           key={joinNotice.id}
-          className={`welcome-toast join-notice-toast${joinNotice.leaving ? ' notice-leaving' : ''}`}
+          className={`welcome-toast join-notice-toast${joinNotice.leaving ? " notice-leaving" : ""}`}
           role="status"
           aria-live="polite"
         >
@@ -85,7 +90,10 @@ export function RoomInvitePage({
         </div>
       )}
       {error && error !== dismissedError && (
-        <p className="form-error error-popup flow-error-popup invitation-error-popup" role="alert">
+        <p
+          className="form-error error-popup flow-error-popup invitation-error-popup"
+          role="alert"
+        >
           <span>{error}</span>
           <button
             type="button"
@@ -101,7 +109,7 @@ export function RoomInvitePage({
         <section className="invitation-copy" aria-label="Room invitation">
           <p className="invitation-eyebrow">
             <span className="lime-dot" />
-            {isOwner ? 'YOUR ROOM IS READY' : 'YOU’RE INVITED TO'}
+            {isOwner ? "YOUR ROOM IS READY" : "YOU’RE INVITED TO"}
           </p>
           <h1>{displayName}</h1>
           <p className="invitation-description">Late thoughts. Good company.</p>
@@ -129,20 +137,29 @@ export function RoomInvitePage({
           <p className="invitation-caption">ONE ROOM. JUST WORDS.</p>
         </section>
 
-        <section className="invitation-panel" aria-labelledby="invitation-panel-title">
+        <section
+          className="invitation-panel"
+          aria-labelledby="invitation-panel-title"
+        >
           {isOwner ? (
             <>
               <p className="panel-eyebrow">READY WHEN YOU ARE</p>
               <h2 id="invitation-panel-title">Bring your people in.</h2>
               <p className="invitation-panel-copy">
-                Share the link for a personal invitation, or send the code to someone you know.
+                Share the link for a personal invitation, or send the code to
+                someone you know.
               </p>
 
               <label className="share-label" htmlFor="invite-link">
                 Invitation link
               </label>
               <div className="share-field">
-                <input id="invite-link" value={inviteLink ?? ''} readOnly onFocus={(event) => event.currentTarget.select()} />
+                <input
+                  id="invite-link"
+                  value={inviteLink ?? ""}
+                  readOnly
+                  onFocus={(event) => event.currentTarget.select()}
+                />
                 <Button
                   className="share-action"
                   type="button"
@@ -155,10 +172,14 @@ export function RoomInvitePage({
                 </Button>
               </div>
               <p className="share-hint">
-                This private link does not contain the room code. Share the code separately so guests can join.
+                This private link does not contain the room code. Share the code
+                separately so guests can join.
               </p>
 
-              <label className="share-label room-code-label" htmlFor="share-room-code">
+              <label
+                className="share-label room-code-label"
+                htmlFor="share-room-code"
+              >
                 Room code
               </label>
               <div className="share-code-row">
@@ -166,7 +187,12 @@ export function RoomInvitePage({
                   <Ticket className="desktop-room-ticket" size={17} />
                   {roomCode}
                 </span>
-                <Button className="share-action" type="button" variant="ghost" onClick={onCopyCode}>
+                <Button
+                  className="share-action"
+                  type="button"
+                  variant="ghost"
+                  onClick={onCopyCode}
+                >
                   <Copy size={17} />
                   <span>Copy code</span>
                 </Button>
@@ -190,13 +216,15 @@ export function RoomInvitePage({
             <>
               <p className="panel-eyebrow">YOUR WAY IN</p>
               <h2 id="invitation-panel-title">
-                {loading ? 'Opening your invitation…' : 'A little space. A lot to say.'}
+                {loading
+                  ? "Opening your invitation…"
+                  : "A little space. A lot to say."}
               </h2>
               <p className="invitation-panel-copy">
                 {loading
-                  ? 'We’re finding the room your host shared.'
+                  ? "We’re finding the room your host shared."
                   : error
-                    ? 'This invitation may have expired or the room may have closed.'
+                    ? "This invitation may have expired or the room may have closed."
                     : `You’ve been invited to ${displayName}. Enter the room code below to continue.`}
               </p>
               <label className="share-label" htmlFor="guest-invite-code">
@@ -216,9 +244,16 @@ export function RoomInvitePage({
                 disabled={loading || connecting}
               />
               <p className="share-hint" id="guest-invite-code-hint">
-                {invitationCode
-                  ? <>Enter the code included with this invitation: <strong className="invitation-code-hint">{invitationCode}</strong></>
-                  : 'Ask the host for the 8-character room code.'}
+                {invitationCode ? (
+                  <>
+                    Enter the code included with this invitation:{" "}
+                    <strong className="invitation-code-hint">
+                      {invitationCode}
+                    </strong>
+                  </>
+                ) : (
+                  "Ask the host for the 8-character room code."
+                )}
               </p>
               <Button
                 className="button button-primary invitation-cta"
@@ -231,12 +266,18 @@ export function RoomInvitePage({
                   !/^[A-HJ-KM-NP-Z2-9]{8}$/.test(inviteCode)
                 }
               >
-                {connecting ? 'Joining room…' : 'Join this room'} <ArrowRight size={17} />
+                {connecting ? "Joining room…" : "Join this room"}{" "}
+                <ArrowRight size={17} />
               </Button>
               <p className="invitation-alias-note">
-                No profile needed. Hushly will tell you your room name as soon as you join.
+                No profile needed. Hushly will tell you your room name as soon
+                as you join.
               </p>
-              <button className="manual-code-link" type="button" onClick={onManualJoin}>
+              <button
+                className="manual-code-link"
+                type="button"
+                onClick={onManualJoin}
+              >
                 Have a room code instead?
               </button>
             </>
@@ -244,5 +285,5 @@ export function RoomInvitePage({
         </section>
       </div>
     </SiteChrome>
-  )
+  );
 }

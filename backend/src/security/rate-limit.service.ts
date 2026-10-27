@@ -14,7 +14,8 @@ export class RateLimitService implements OnModuleDestroy {
 
   // true = allowed, false = too many requests
   allow(key: string, limit: number, windowMs: number): boolean {
-    if (!this.hits.has(key) && this.hits.size >= this.maxTrackedKeys) return false;
+    if (!this.hits.has(key) && this.hits.size >= this.maxTrackedKeys)
+      return false;
     const now = Date.now();
     const recent = (this.hits.get(key) ?? []).filter((t) => now - t < windowMs);
     if (recent.length >= limit) {

@@ -2,12 +2,40 @@ import { Injectable } from '@nestjs/common';
 import { randomInt } from 'crypto';
 
 const ADJECTIVES = [
-  'Quiet', 'Blue', 'Swift', 'Gentle', 'Brave', 'Calm', 'Clever', 'Misty',
-  'Golden', 'Silver', 'Lucky', 'Sleepy', 'Bright', 'Cosmic', 'Fuzzy', 'Hidden',
+  'Quiet',
+  'Blue',
+  'Swift',
+  'Gentle',
+  'Brave',
+  'Calm',
+  'Clever',
+  'Misty',
+  'Golden',
+  'Silver',
+  'Lucky',
+  'Sleepy',
+  'Bright',
+  'Cosmic',
+  'Fuzzy',
+  'Hidden',
 ];
 const ANIMALS = [
-  'Fox', 'Ghost', 'Owl', 'Panda', 'Wolf', 'Otter', 'Falcon', 'Tiger',
-  'Koala', 'Raven', 'Lynx', 'Heron', 'Badger', 'Moth', 'Newt', 'Whale',
+  'Fox',
+  'Ghost',
+  'Owl',
+  'Panda',
+  'Wolf',
+  'Otter',
+  'Falcon',
+  'Tiger',
+  'Koala',
+  'Raven',
+  'Lynx',
+  'Heron',
+  'Badger',
+  'Moth',
+  'Newt',
+  'Whale',
 ];
 
 @Injectable()

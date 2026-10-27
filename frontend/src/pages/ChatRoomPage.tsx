@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import * as AlertDialog from 'radix-ui/alert-dialog'
-import * as Dialog from 'radix-ui/dialog'
-import * as DropdownMenu from 'radix-ui/dropdown-menu'
-import * as Popover from 'radix-ui/popover'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import * as AlertDialog from "radix-ui/alert-dialog";
+import * as Dialog from "radix-ui/dialog";
+import * as DropdownMenu from "radix-ui/dropdown-menu";
+import * as Popover from "radix-ui/popover";
 import {
   ArrowUp,
   Check,
@@ -15,81 +21,99 @@ import {
   Trash2,
   UserRoundMinus,
   UserRoundPlus,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type {
   BlockedParticipant,
   Message,
   RoomNotice,
   RoomParticipant,
   Session,
-} from '@/types/hushly'
-import { avatarColor, firstNameInitial, initials } from '@/types/hushly'
-import Logo from '../../public/Spirit mark.png'
+} from "@/types/hushly";
+import { avatarColor, firstNameInitial, initials } from "@/types/hushly";
+import Logo from "../../public/Spirit mark.png";
 
-const composerEmojis = ['😊', '😂', '🥹', '😍', '😎', '👀', '🙌', '👏', '❤️', '✨', '🔥', '👍']
+const composerEmojis = [
+  "😊",
+  "😂",
+  "🥹",
+  "😍",
+  "😎",
+  "👀",
+  "🙌",
+  "👏",
+  "❤️",
+  "✨",
+  "🔥",
+  "👍",
+];
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function renderMessageBody(body: string, participants: RoomParticipant[]): ReactNode {
-  const names = [...new Set(participants.map((participant) => participant.displayName))]
+function renderMessageBody(
+  body: string,
+  participants: RoomParticipant[],
+): ReactNode {
+  const names = [
+    ...new Set(participants.map((participant) => participant.displayName)),
+  ]
     .sort((left, right) => right.length - left.length)
-    .map(escapeRegExp)
-  if (names.length === 0) return body
+    .map(escapeRegExp);
+  if (names.length === 0) return body;
 
   const matcher = new RegExp(
-    `@(${names.join('|')})(?=$|[^\\p{L}\\p{N}_])`,
-    'giu',
-  )
-  const parts: ReactNode[] = []
-  let cursor = 0
-  let match: RegExpExecArray | null
+    `@(${names.join("|")})(?=$|[^\\p{L}\\p{N}_])`,
+    "giu",
+  );
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
   while ((match = matcher.exec(body)) !== null) {
-    parts.push(body.slice(cursor, match.index))
+    parts.push(body.slice(cursor, match.index));
     parts.push(
       <span className="message-mention" key={`mention-${match.index}`}>
         @{match[1]}
       </span>,
-    )
-    cursor = match.index + match[0].length
+    );
+    cursor = match.index + match[0].length;
   }
-  parts.push(body.slice(cursor))
-  return parts
+  parts.push(body.slice(cursor));
+  return parts;
 }
 
 type ChatRoomPageProps = {
-  session: Session
-  messages: Message[]
-  draft: string
-  error: string
-  sendFailure: string | null
-  sendingMessage: boolean
-  copied: boolean
-  connected: boolean
-  connectedCount: number
-  ownerGraceEndsAt: number | null
-  pendingRoomEnd: boolean
-  welcomeName: string
-  roomNotice: RoomNotice | null
-  roomNoticeLeaving: boolean
-  typingParticipants: string[]
-  participants: RoomParticipant[]
-  blockedParticipants: BlockedParticipant[]
-  onDraftChange: (value: string | ((current: string) => string)) => void
-  onDismissError: () => void
-  onDismissSendFailure: () => void
-  onSend: (event: FormEvent<HTMLFormElement>) => void
-  onEditMessage: (messageId: string, body: string) => void
-  onDeleteMessage: (messageId: string) => void
-  onTypingChange: (isTyping: boolean) => void
-  onCopyCode: () => void
-  onBlockParticipant: (participantId: string) => void
-  onUnblockParticipant: (blockedId: string) => void
-  onLeave: () => void
-  onClose: () => void
-}
+  session: Session;
+  messages: Message[];
+  draft: string;
+  error: string;
+  sendFailure: string | null;
+  sendingMessage: boolean;
+  copied: boolean;
+  connected: boolean;
+  connectedCount: number;
+  ownerGraceEndsAt: number | null;
+  pendingRoomEnd: boolean;
+  welcomeName: string;
+  roomNotice: RoomNotice | null;
+  roomNoticeLeaving: boolean;
+  typingParticipants: string[];
+  participants: RoomParticipant[];
+  blockedParticipants: BlockedParticipant[];
+  onDraftChange: (value: string | ((current: string) => string)) => void;
+  onDismissError: () => void;
+  onDismissSendFailure: () => void;
+  onSend: (event: FormEvent<HTMLFormElement>) => void;
+  onEditMessage: (messageId: string, body: string) => void;
+  onDeleteMessage: (messageId: string) => void;
+  onTypingChange: (isTyping: boolean) => void;
+  onCopyCode: () => void;
+  onBlockParticipant: (participantId: string) => void;
+  onUnblockParticipant: (blockedId: string) => void;
+  onLeave: () => void;
+  onClose: () => void;
+};
 
 export function ChatRoomPage({
   session,
@@ -122,174 +146,184 @@ export function ChatRoomPage({
   onLeave,
   onClose,
 }: ChatRoomPageProps) {
-  const messageEndRef = useRef<HTMLDivElement | null>(null)
-  const conversationRef = useRef<HTMLElement | null>(null)
-  const shouldStickToBottomRef = useRef(true)
-  const composerRef = useRef<HTMLTextAreaElement | null>(null)
-  const typingStateRef = useRef(false)
-  const messageHoldTimerRef = useRef<number | null>(null)
-  const messageHoldOriginRef = useRef<{ x: number; y: number } | null>(null)
-  const draftBeforeEditRef = useRef('')
-  const holdTriggeredRef = useRef(false)
-  const [confirmClose, setConfirmClose] = useState(false)
-  const [managePeopleOpen, setManagePeopleOpen] = useState(false)
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const conversationRef = useRef<HTMLElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const typingStateRef = useRef(false);
+  const messageHoldTimerRef = useRef<number | null>(null);
+  const messageHoldOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const draftBeforeEditRef = useRef("");
+  const holdTriggeredRef = useRef(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [managePeopleOpen, setManagePeopleOpen] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [heldMessage, setHeldMessage] = useState<{
-    messageId: string
-    x: number
-    y: number
-  } | null>(null)
-  const [welcomeVisible, setWelcomeVisible] = useState(Boolean(welcomeName))
+    messageId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [welcomeVisible, setWelcomeVisible] = useState(Boolean(welcomeName));
   const [mentionQuery, setMentionQuery] = useState<{
-    start: number
-    end: number
-    query: string
-  } | null>(null)
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
-  const [clockNow, setClockNow] = useState(() => Date.now())
+    start: number;
+    end: number;
+    query: string;
+  } | null>(null);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!ownerGraceEndsAt) return
-    const timer = window.setInterval(() => setClockNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [ownerGraceEndsAt])
+    if (!ownerGraceEndsAt) return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [ownerGraceEndsAt]);
 
   useEffect(
     () => () => {
       if (messageHoldTimerRef.current !== null) {
-        window.clearTimeout(messageHoldTimerRef.current)
+        window.clearTimeout(messageHoldTimerRef.current);
       }
     },
     [],
-  )
+  );
 
   useEffect(() => {
-    if (!heldMessage) return
+    if (!heldMessage) return;
     function dismissMessageActions(event: PointerEvent) {
       if (
         event.target instanceof Element &&
-        event.target.closest('.message-hold-actions')
+        event.target.closest(".message-hold-actions")
       ) {
-        return
+        return;
       }
-      setHeldMessage(null)
+      setHeldMessage(null);
     }
-    document.addEventListener('pointerdown', dismissMessageActions)
-    return () => document.removeEventListener('pointerdown', dismissMessageActions)
-  }, [heldMessage])
+    document.addEventListener("pointerdown", dismissMessageActions);
+    return () =>
+      document.removeEventListener("pointerdown", dismissMessageActions);
+  }, [heldMessage]);
 
   useEffect(() => {
-    if (!welcomeName || roomNotice) return
-    const timer = window.setTimeout(() => setWelcomeVisible(false), 5000)
-    return () => window.clearTimeout(timer)
-  }, [welcomeName, roomNotice])
+    if (!welcomeName || roomNotice) return;
+    const timer = window.setTimeout(() => setWelcomeVisible(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [welcomeName, roomNotice]);
 
   useEffect(() => {
-    const conversation = conversationRef.current
-    if (!conversation || !shouldStickToBottomRef.current) return
-    conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' })
-  }, [messages])
+    const conversation = conversationRef.current;
+    if (!conversation || !shouldStickToBottomRef.current) return;
+    conversation.scrollTo({
+      top: conversation.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages]);
 
   useEffect(() => {
-    if (!draft && composerRef.current) composerRef.current.style.height = 'auto'
-  }, [draft])
+    if (!draft && composerRef.current)
+      composerRef.current.style.height = "auto";
+  }, [draft]);
 
   function setTyping(isTyping: boolean) {
-    if (typingStateRef.current === isTyping) return
-    typingStateRef.current = isTyping
-    onTypingChange(isTyping)
+    if (typingStateRef.current === isTyping) return;
+    typingStateRef.current = isTyping;
+    onTypingChange(isTyping);
   }
 
   function handleSend(event: FormEvent<HTMLFormElement>) {
-    setTyping(false)
-    setMentionQuery(null)
+    setTyping(false);
+    setMentionQuery(null);
     if (!editingMessageId) {
-      onSend(event)
-      return
+      onSend(event);
+      return;
     }
-    event.preventDefault()
-    const body = draft.trim()
-    if (!body) return
-    onEditMessage(editingMessageId, body)
-    setEditingMessageId(null)
-    draftBeforeEditRef.current = ''
-    onDraftChange('')
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body) return;
+    onEditMessage(editingMessageId, body);
+    setEditingMessageId(null);
+    draftBeforeEditRef.current = "";
+    onDraftChange("");
   }
 
   function beginEdit(message: Message) {
-    draftBeforeEditRef.current = draft
-    setEditingMessageId(message.id)
-    onDraftChange(message.body)
-    setHeldMessage(null)
-    window.requestAnimationFrame(() => composerRef.current?.focus())
+    draftBeforeEditRef.current = draft;
+    setEditingMessageId(message.id);
+    onDraftChange(message.body);
+    setHeldMessage(null);
+    window.requestAnimationFrame(() => composerRef.current?.focus());
   }
 
   function cancelEdit() {
-    setEditingMessageId(null)
-    onDraftChange(draftBeforeEditRef.current)
-    draftBeforeEditRef.current = ''
-    window.requestAnimationFrame(() => composerRef.current?.focus())
+    setEditingMessageId(null);
+    onDraftChange(draftBeforeEditRef.current);
+    draftBeforeEditRef.current = "";
+    window.requestAnimationFrame(() => composerRef.current?.focus());
   }
 
   function getMentionQuery(value: string, cursor: number) {
-    const textBeforeCursor = value.slice(0, cursor)
-    const start = textBeforeCursor.lastIndexOf('@')
-    if (start < 0 || (start > 0 && /[\p{L}\p{N}_]/u.test(textBeforeCursor[start - 1]))) {
-      return null
+    const textBeforeCursor = value.slice(0, cursor);
+    const start = textBeforeCursor.lastIndexOf("@");
+    if (
+      start < 0 ||
+      (start > 0 && /[\p{L}\p{N}_]/u.test(textBeforeCursor[start - 1]))
+    ) {
+      return null;
     }
 
-    const query = textBeforeCursor.slice(start + 1)
-    if (query.includes('\n')) return null
-    return { start, end: cursor, query: query.trimStart() }
+    const query = textBeforeCursor.slice(start + 1);
+    if (query.includes("\n")) return null;
+    return { start, end: cursor, query: query.trimStart() };
   }
 
   function insertMention(participant: RoomParticipant) {
-    if (!mentionQuery) return
-    const inserted = `@${participant.displayName} `
+    if (!mentionQuery) return;
+    const inserted = `@${participant.displayName} `;
     const nextDraft =
-      draft.slice(0, mentionQuery.start) + inserted + draft.slice(mentionQuery.end)
-    onDraftChange(nextDraft)
-    setMentionQuery(null)
-    setSelectedMentionIndex(0)
-    setTyping(true)
+      draft.slice(0, mentionQuery.start) +
+      inserted +
+      draft.slice(mentionQuery.end);
+    onDraftChange(nextDraft);
+    setMentionQuery(null);
+    setSelectedMentionIndex(0);
+    setTyping(true);
     window.requestAnimationFrame(() => {
-      const composer = composerRef.current
-      if (!composer) return
-      const cursor = mentionQuery.start + inserted.length
-      composer.focus()
-      composer.setSelectionRange(cursor, cursor)
-    })
+      const composer = composerRef.current;
+      if (!composer) return;
+      const cursor = mentionQuery.start + inserted.length;
+      composer.focus();
+      composer.setSelectionRange(cursor, cursor);
+    });
   }
 
   function cancelMessageHold() {
     if (messageHoldTimerRef.current !== null) {
-      window.clearTimeout(messageHoldTimerRef.current)
-      messageHoldTimerRef.current = null
+      window.clearTimeout(messageHoldTimerRef.current);
+      messageHoldTimerRef.current = null;
     }
-    messageHoldOriginRef.current = null
+    messageHoldOriginRef.current = null;
   }
 
   function startMessageHold(message: Message, x: number, y: number) {
-    const own = message.senderId === session.participantId
-    if (!own && !session.isOwner) return
-    cancelMessageHold()
-    holdTriggeredRef.current = false
-    messageHoldOriginRef.current = { x, y }
+    const own = message.senderId === session.participantId;
+    if (!own && !session.isOwner) return;
+    cancelMessageHold();
+    holdTriggeredRef.current = false;
+    messageHoldOriginRef.current = { x, y };
     messageHoldTimerRef.current = window.setTimeout(() => {
-      holdTriggeredRef.current = true
+      holdTriggeredRef.current = true;
       setHeldMessage({
         messageId: message.id,
         x: Math.max(8, Math.min(x, window.innerWidth - 170)),
         y: Math.max(8, Math.min(y - 54, window.innerHeight - 58)),
-      })
-      messageHoldTimerRef.current = null
-    }, 500)
+      });
+      messageHoldTimerRef.current = null;
+    }, 500);
   }
 
   function handleMessagePointerMove(x: number, y: number) {
-    const origin = messageHoldOriginRef.current
-    if (!origin || messageHoldTimerRef.current === null) return
-    if (Math.hypot(x - origin.x, y - origin.y) > 12) cancelMessageHold()
+    const origin = messageHoldOriginRef.current;
+    if (!origin || messageHoldTimerRef.current === null) return;
+    if (Math.hypot(x - origin.x, y - origin.y) > 12) cancelMessageHold();
   }
 
   const typingLabel =
@@ -299,15 +333,17 @@ export function ChatRoomPage({
         ? `${typingParticipants[0]} and ${typingParticipants[1]} are typing…`
         : typingParticipants.length > 2
           ? `${typingParticipants[0]} and ${typingParticipants.length - 1} others are typing…`
-          : null
+          : null;
   const graceSeconds =
     ownerGraceEndsAt === null
       ? null
-      : Math.max(0, Math.ceil((ownerGraceEndsAt - clockNow) / 1000))
+      : Math.max(0, Math.ceil((ownerGraceEndsAt - clockNow) / 1000));
   const lastOwnMessageId = [...messages]
     .reverse()
-    .find((message) => message.senderId === session.participantId)?.id
-  const connectedParticipants = participants.filter((participant) => participant.connected)
+    .find((message) => message.senderId === session.participantId)?.id;
+  const connectedParticipants = participants.filter(
+    (participant) => participant.connected,
+  );
   const mentionCandidates = mentionQuery
     ? connectedParticipants
         .filter(
@@ -318,7 +354,7 @@ export function ChatRoomPage({
               .startsWith(mentionQuery.query.trim().toLocaleLowerCase()),
         )
         .slice(0, 5)
-    : []
+    : [];
 
   return (
     <main className="chat-shell min-h-svh bg-[#0d100d] text-[#edeee8]">
@@ -328,10 +364,10 @@ export function ChatRoomPage({
             <h1>{session.roomName}</h1>
           </div>
           <span className="chat-room-status">
-            <i className={connected ? 'online-dot' : 'online-dot offline'} />
+            <i className={connected ? "online-dot" : "online-dot offline"} />
             {connected
-              ? `${connectedCount} ${connectedCount === 1 ? 'person' : 'people'} connected`
-              : 'Reconnecting'}
+              ? `${connectedCount} ${connectedCount === 1 ? "person" : "people"} connected`
+              : "Reconnecting"}
           </span>
         </div>
         <div className="chat-actions flex items-center gap-3">
@@ -343,12 +379,16 @@ export function ChatRoomPage({
               onClick={onCopyCode}
               aria-label={`Copy room code ${session.roomCode}`}
             >
-              <Ticket className="desktop-room-ticket" size={14} /> {session.roomCode}
+              <Ticket className="desktop-room-ticket" size={14} />{" "}
+              {session.roomCode}
             </Button>
           ) : (
             <span className="private-room-label">Private room</span>
           )}
-          <span className="profile-pill hidden place-items-center md:grid" title={session.displayName}>
+          <span
+            className="profile-pill hidden place-items-center md:grid"
+            title={session.displayName}
+          >
             {initials(session.displayName)}
           </span>
           <DropdownMenu.Root>
@@ -396,8 +436,8 @@ export function ChatRoomPage({
                   <DropdownMenu.Item
                     className="danger-item cursor-pointer rounded px-2 py-2 text-xs outline-none hover:bg-[#272d25] focus:bg-[#272d25]"
                     onSelect={(event) => {
-                      event.preventDefault()
-                      setConfirmClose(true)
+                      event.preventDefault();
+                      setConfirmClose(true);
                     }}
                   >
                     End room for everyone
@@ -457,16 +497,25 @@ export function ChatRoomPage({
               Manage people
             </Dialog.Title>
             <Dialog.Description className="mt-2 text-sm leading-relaxed text-[#b7bead]">
-              Block a browser to remove it and prevent it from rejoining with this room code.
+              Block a browser to remove it and prevent it from rejoining with
+              this room code.
             </Dialog.Description>
-            <section className="people-section" aria-label="People in this room">
+            <section
+              className="people-section"
+              aria-label="People in this room"
+            >
               <h3>In this room ({connectedCount} connected)</h3>
               <div className="people-list">
                 {connectedParticipants.map((participant) => (
                   <div className="person-row" key={participant.id}>
                     <div className="person-details">
-                      <strong>{participant.displayName}{participant.isOwner ? ' (you)' : ''}</strong>
-                      <span>{participant.connected ? 'Connected' : 'Away'}</span>
+                      <strong>
+                        {participant.displayName}
+                        {participant.isOwner ? " (you)" : ""}
+                      </strong>
+                      <span>
+                        {participant.connected ? "Connected" : "Away"}
+                      </span>
                     </div>
                     {!participant.isOwner && (
                       <Button
@@ -487,7 +536,10 @@ export function ChatRoomPage({
                 )}
               </div>
             </section>
-            <section className="people-section blocked-section" aria-label="Blocked browsers">
+            <section
+              className="people-section blocked-section"
+              aria-label="Blocked browsers"
+            >
               <h3>Blocked browsers ({blockedParticipants.length})</h3>
               <div className="people-list">
                 {blockedParticipants.map((blocked) => (
@@ -514,8 +566,8 @@ export function ChatRoomPage({
               </div>
             </section>
             <p className="block-scope-note">
-              Blocks are tied to this browser profile. Clearing site data or switching browsers/devices
-              can reset this anonymous identity.
+              Blocks are tied to this browser profile. Clearing site data or
+              switching browsers/devices can reset this anonymous identity.
             </p>
             <div className="people-dialog-actions">
               <Dialog.Close asChild>
@@ -539,8 +591,8 @@ export function ChatRoomPage({
               End this room?
             </AlertDialog.Title>
             <AlertDialog.Description className="mt-2 text-sm leading-relaxed text-[#b7bead]">
-              Everyone will be disconnected, and the room’s messages and invite code will be deleted.
-              This can’t be undone.
+              Everyone will be disconnected, and the room’s messages and invite
+              code will be deleted. This can’t be undone.
             </AlertDialog.Description>
             <div className="close-room-actions mt-6 flex justify-end gap-3">
               <AlertDialog.Cancel asChild>
@@ -553,7 +605,7 @@ export function ChatRoomPage({
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
                 <Button
-                variant={'destructive'}
+                  variant={"destructive"}
                   className="end-room-confirm-button rounded-lg text-sm font-semibold text-black"
                   onClick={onClose}
                 >
@@ -584,7 +636,7 @@ export function ChatRoomPage({
       {roomNotice && (
         <div
           key={roomNotice.id}
-          className={`welcome-toast join-notice-toast room-notice-toast${roomNoticeLeaving ? ' notice-leaving' : ''}`}
+          className={`welcome-toast join-notice-toast room-notice-toast${roomNoticeLeaving ? " notice-leaving" : ""}`}
           role="status"
           aria-live="polite"
         >
@@ -593,14 +645,14 @@ export function ChatRoomPage({
           </span>
           <span className="welcome-toast-copy">
             <strong>
-              {roomNotice.kind === 'mention'
+              {roomNotice.kind === "mention"
                 ? `${roomNotice.displayName} mentioned you`
                 : `${roomNotice.displayName} joined the room`}
             </strong>
             <small>
-              {roomNotice.kind === 'mention'
-                ? 'Check the conversation to see what they said.'
-                : 'Say hello and make them feel welcome.'}
+              {roomNotice.kind === "mention"
+                ? "Check the conversation to see what they said."
+                : "Say hello and make them feel welcome."}
             </small>
           </span>
         </div>
@@ -612,9 +664,10 @@ export function ChatRoomPage({
         aria-label="Room conversation"
         aria-live="polite"
         onScroll={(event) => {
-          const element = event.currentTarget
+          const element = event.currentTarget;
           shouldStickToBottomRef.current =
-            element.scrollHeight - element.scrollTop - element.clientHeight < 80
+            element.scrollHeight - element.scrollTop - element.clientHeight <
+            80;
         }}
       >
         {messages.length === 0 ? (
@@ -623,22 +676,24 @@ export function ChatRoomPage({
               <img className="chat-spirit-mark" src={Logo} alt="" />
             </div>
             <h2>A little space. A lot to say.</h2>
-            <p>Start with a question, a thought, or whatever brought you here.</p>
+            <p>
+              Start with a question, a thought, or whatever brought you here.
+            </p>
           </div>
         ) : (
           messages.map((message, index) => {
-            const own = message.senderId === session.participantId
-            const previous = messages[index - 1]
+            const own = message.senderId === session.participantId;
+            const previous = messages[index - 1];
             const grouped =
               previous?.senderId === message.senderId &&
-              message.sentAt - previous.sentAt < 120000
-            const canEdit = own || Boolean(session.isOwner)
-            const canDelete = own || Boolean(session.isOwner)
+              message.sentAt - previous.sentAt < 120000;
+            const canEdit = own || Boolean(session.isOwner);
+            const canDelete = own || Boolean(session.isOwner);
 
             return (
               <div key={message.id} className="message-line">
                 <article
-                  className={`message-row ${own ? 'own-message' : ''} ${grouped ? 'grouped-message' : ''}`}
+                  className={`message-row ${own ? "own-message" : ""} ${grouped ? "grouped-message" : ""}`}
                 >
                   {!own &&
                     (!grouped ? (
@@ -655,16 +710,24 @@ export function ChatRoomPage({
                     ))}
                   <div className="message-content">
                     {!grouped && (
-                      <div className={`message-author ${own ? 'message-author-own' : ''}`}>
-                        {own ? `${session.displayName} · You` : message.senderName}
+                      <div
+                        className={`message-author ${own ? "message-author-own" : ""}`}
+                      >
+                        {own
+                          ? `${session.displayName} · You`
+                          : message.senderName}
                       </div>
                     )}
                     <div className="message-body-row">
                       <p
                         className="message-bubble"
                         onPointerDown={(event) => {
-                          if (event.button !== 0) return
-                          startMessageHold(message, event.clientX, event.clientY)
+                          if (event.button !== 0) return;
+                          startMessageHold(
+                            message,
+                            event.clientX,
+                            event.clientY,
+                          );
                         }}
                         onPointerMove={(event) =>
                           handleMessagePointerMove(event.clientX, event.clientY)
@@ -673,27 +736,39 @@ export function ChatRoomPage({
                         onPointerCancel={cancelMessageHold}
                         onPointerLeave={cancelMessageHold}
                         onContextMenu={(event) => {
-                          if (!canEdit && !canDelete) return
-                          event.preventDefault()
+                          if (!canEdit && !canDelete) return;
+                          event.preventDefault();
                           setHeldMessage({
                             messageId: message.id,
-                            x: Math.max(8, Math.min(event.clientX, window.innerWidth - 170)),
-                            y: Math.max(8, Math.min(event.clientY - 54, window.innerHeight - 58)),
-                          })
+                            x: Math.max(
+                              8,
+                              Math.min(event.clientX, window.innerWidth - 170),
+                            ),
+                            y: Math.max(
+                              8,
+                              Math.min(
+                                event.clientY - 54,
+                                window.innerHeight - 58,
+                              ),
+                            ),
+                          });
                         }}
                         onClick={(event) => {
-                          if (!holdTriggeredRef.current) return
-                          event.preventDefault()
-                          event.stopPropagation()
-                          holdTriggeredRef.current = false
+                          if (!holdTriggeredRef.current) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          holdTriggeredRef.current = false;
                         }}
                       >
                         {renderMessageBody(message.body, participants)}
                       </p>
                     </div>
-                    {(message.edited || (own && message.id === lastOwnMessageId)) && (
+                    {(message.edited ||
+                      (own && message.id === lastOwnMessageId)) && (
                       <div className="message-meta-row">
-                        {message.edited && <span className="message-edited">Edited</span>}
+                        {message.edited && (
+                          <span className="message-edited">Edited</span>
+                        )}
                         {own && message.id === lastOwnMessageId && (
                           <span className="message-status">Sent</span>
                         )}
@@ -714,17 +789,19 @@ export function ChatRoomPage({
                     ))}
                 </article>
               </div>
-            )
+            );
           })
         )}
         {heldMessage &&
           messages.some((message) => message.id === heldMessage.messageId) &&
           (() => {
-            const message = messages.find((item) => item.id === heldMessage.messageId)
-            if (!message) return null
-            const own = message.senderId === session.participantId
-            const canEdit = own || Boolean(session.isOwner)
-            const canDelete = own || Boolean(session.isOwner)
+            const message = messages.find(
+              (item) => item.id === heldMessage.messageId,
+            );
+            if (!message) return null;
+            const own = message.senderId === session.participantId;
+            const canEdit = own || Boolean(session.isOwner);
+            const canDelete = own || Boolean(session.isOwner);
             return (
               <div
                 className="message-hold-actions"
@@ -733,7 +810,11 @@ export function ChatRoomPage({
                 style={{ left: heldMessage.x, top: heldMessage.y }}
               >
                 {canEdit && (
-                  <Button type="button" variant="ghost" onClick={() => beginEdit(message)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => beginEdit(message)}
+                  >
                     <Pencil size={14} />
                     Edit
                   </Button>
@@ -743,8 +824,8 @@ export function ChatRoomPage({
                     type="button"
                     variant="ghost"
                     onClick={() => {
-                      onDeleteMessage(message.id)
-                      setHeldMessage(null)
+                      onDeleteMessage(message.id);
+                      setHeldMessage(null);
                     }}
                   >
                     <Trash2 size={14} />
@@ -752,7 +833,7 @@ export function ChatRoomPage({
                   </Button>
                 )}
               </div>
-            )
+            );
           })()}
         <div ref={messageEndRef} />
       </section>
@@ -763,8 +844,8 @@ export function ChatRoomPage({
             <p className="connection-alert" role="status" aria-live="polite">
               <span>
                 {pendingRoomEnd
-                  ? 'End room requested. It will close as soon as your connection returns.'
-                  : 'Connection lost. Reconnecting to your room…'}
+                  ? "End room requested. It will close as soon as your connection returns."
+                  : "Connection lost. Reconnecting to your room…"}
               </span>
             </p>
           )}
@@ -774,7 +855,8 @@ export function ChatRoomPage({
             <span>
               <strong>Room owner reconnecting</strong>
               <span>
-                <b>{graceSeconds}s</b> remaining. The chat will be destroyed if the owner doesn’t reconnect.
+                <b>{graceSeconds}s</b> remaining. The chat will be destroyed if
+                the owner doesn’t reconnect.
               </span>
             </span>
           </div>
@@ -790,7 +872,9 @@ export function ChatRoomPage({
             ) : (
               <span className="online-dot" />
             )}
-            <span>{typingLabel ?? 'Messages are limited to 20 every 10 seconds.'}</span>
+            <span>
+              {typingLabel ?? "Messages are limited to 20 every 10 seconds."}
+            </span>
           </div>
         )}
         {editingMessageId && (
@@ -841,7 +925,9 @@ export function ChatRoomPage({
                       variant="ghost"
                       className="emoji-choice"
                       aria-label={`Insert ${emoji}`}
-                      onClick={() => onDraftChange((current) => `${current}${emoji}`)}
+                      onClick={() =>
+                        onDraftChange((current) => `${current}${emoji}`)
+                      }
                     >
                       {emoji}
                     </Button>
@@ -857,53 +943,63 @@ export function ChatRoomPage({
             rows={1}
             placeholder={
               !connected
-                ? 'Reconnecting…'
+                ? "Reconnecting…"
                 : editingMessageId
-                  ? 'Edit your message…'
+                  ? "Edit your message…"
                   : `Say something, ${session.displayName}`
             }
             aria-label="Write a message"
             disabled={!connected || sendingMessage}
             onChange={(event) => {
-              onDraftChange(event.target.value)
-              setTyping(Boolean(event.target.value.trim()))
+              onDraftChange(event.target.value);
+              setTyping(Boolean(event.target.value.trim()));
               setMentionQuery(
-                getMentionQuery(event.target.value, event.currentTarget.selectionStart),
-              )
-              setSelectedMentionIndex(0)
-              event.currentTarget.style.height = 'auto'
-              event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 144)}px`
+                getMentionQuery(
+                  event.target.value,
+                  event.currentTarget.selectionStart,
+                ),
+              );
+              setSelectedMentionIndex(0);
+              event.currentTarget.style.height = "auto";
+              event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 144)}px`;
             }}
             onKeyDown={(event) => {
-              if (mentionCandidates.length > 0 && event.key === 'ArrowDown') {
-                event.preventDefault()
-                setSelectedMentionIndex((index) => (index + 1) % mentionCandidates.length)
-                return
-              }
-              if (mentionCandidates.length > 0 && event.key === 'ArrowUp') {
-                event.preventDefault()
+              if (mentionCandidates.length > 0 && event.key === "ArrowDown") {
+                event.preventDefault();
                 setSelectedMentionIndex(
-                  (index) => (index - 1 + mentionCandidates.length) % mentionCandidates.length,
-                )
-                return
+                  (index) => (index + 1) % mentionCandidates.length,
+                );
+                return;
+              }
+              if (mentionCandidates.length > 0 && event.key === "ArrowUp") {
+                event.preventDefault();
+                setSelectedMentionIndex(
+                  (index) =>
+                    (index - 1 + mentionCandidates.length) %
+                    mentionCandidates.length,
+                );
+                return;
               }
               if (
                 mentionCandidates.length > 0 &&
-                (event.key === 'Enter' || event.key === 'Tab')
+                (event.key === "Enter" || event.key === "Tab")
               ) {
-                event.preventDefault()
-                insertMention(mentionCandidates[selectedMentionIndex] ?? mentionCandidates[0])
-                return
+                event.preventDefault();
+                insertMention(
+                  mentionCandidates[selectedMentionIndex] ??
+                    mentionCandidates[0],
+                );
+                return;
               }
-              if (event.key === 'Escape' && mentionQuery) {
-                event.preventDefault()
-                setMentionQuery(null)
-                return
+              if (event.key === "Escape" && mentionQuery) {
+                event.preventDefault();
+                setMentionQuery(null);
+                return;
               }
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                setTyping(false)
-                event.currentTarget.form?.requestSubmit()
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                setTyping(false);
+                event.currentTarget.form?.requestSubmit();
               }
             }}
             onBlur={() => setTyping(false)}
@@ -911,31 +1007,40 @@ export function ChatRoomPage({
           <Button
             className="send-button size-9 rounded-full bg-[#d5ff67] p-0 text-[#18200e] hover:bg-[#e0ff8b]"
             type="submit"
-            aria-label={editingMessageId ? 'Save edited message' : 'Send message'}
+            aria-label={
+              editingMessageId ? "Save edited message" : "Send message"
+            }
             disabled={!draft.trim() || !connected || sendingMessage}
           >
             {editingMessageId ? (
-             <Check size={19} />
+              <Check size={19} />
             ) : sendingMessage ? (
-             <span className="send-spinner" aria-label="Sending message" />
+              <span className="send-spinner" aria-label="Sending message" />
             ) : (
-             <ArrowUp size={19} />
+              <ArrowUp size={19} />
             )}
           </Button>
         </form>
         {mentionCandidates.length > 0 && (
-          <div className="mention-suggestions" role="listbox" aria-label="Mention a participant">
+          <div
+            className="mention-suggestions"
+            role="listbox"
+            aria-label="Mention a participant"
+          >
             {mentionCandidates.map((participant, index) => (
               <button
                 key={participant.id}
                 type="button"
-                className={`mention-suggestion${index === selectedMentionIndex ? ' selected' : ''}`}
+                className={`mention-suggestion${index === selectedMentionIndex ? " selected" : ""}`}
                 role="option"
                 aria-selected={index === selectedMentionIndex}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => insertMention(participant)}
               >
-                <span className="mention-suggestion-avatar" style={avatarColor(participant.id)}>
+                <span
+                  className="mention-suggestion-avatar"
+                  style={avatarColor(participant.id)}
+                >
                   {initials(participant.displayName)}
                 </span>
                 <span>{participant.displayName}</span>
@@ -953,5 +1058,5 @@ export function ChatRoomPage({
         </div>
       </div>
     </main>
-  )
+  );
 }

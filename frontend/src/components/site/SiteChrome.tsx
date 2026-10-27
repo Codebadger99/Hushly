@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react'
-import { ArrowUpRight } from 'lucide-react'
-import Logo from '../../../public/Spirit mark.png'
+import type { ReactNode } from "react";
+import { ArrowUpRight } from "lucide-react";
+import Logo from "../../../public/Spirit mark.png";
 
 type SiteChromeProps = {
-  children: ReactNode
-  home: boolean
-  onHome: () => void
-}
+  children: ReactNode;
+  home: boolean;
+  onHome: () => void;
+};
 
 export function SiteChrome({ children, home, onHome }: SiteChromeProps) {
   return (
@@ -16,8 +16,8 @@ export function SiteChrome({ children, home, onHome }: SiteChromeProps) {
           className="brand inline-flex items-center gap-2.5 text-2xl font-bold tracking-tight text-[#f2f3ed] no-underline"
           href="#home"
           onClick={(event) => {
-            event.preventDefault()
-            onHome()
+            event.preventDefault();
+            onHome();
           }}
           aria-label="Hushly home"
         >
@@ -30,14 +30,18 @@ export function SiteChrome({ children, home, onHome }: SiteChromeProps) {
           </span>
           <a
             className="header-link inline-flex items-center gap-2 text-xs text-[#dedfd8] no-underline"
-            href={home ? '#how' : '#home'}
+            href={home ? "#how" : "#home"}
             onClick={(event) => {
-              event.preventDefault()
-              if (!home) onHome()
-              else document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })
+              event.preventDefault();
+              if (!home) onHome();
+              else
+                document
+                  .getElementById("how")
+                  ?.scrollIntoView({ behavior: "smooth" });
             }}
           >
-            {home ? 'How it works' : 'Back to Hushly'} <ArrowUpRight size={14} />
+            {home ? "How it works" : "Back to Hushly"}{" "}
+            <ArrowUpRight size={14} />
           </a>
         </div>
       </header>
@@ -49,10 +53,10 @@ export function SiteChrome({ children, home, onHome }: SiteChromeProps) {
             Privacy
           </a>
           <a href="#guidelines" onClick={(event) => event.preventDefault()}>
-            {home ? 'Community guidelines' : 'Rules'}
+            {home ? "Community guidelines" : "Rules"}
           </a>
         </div>
       </footer>
     </div>
-  )
+  );
 }

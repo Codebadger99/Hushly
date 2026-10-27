@@ -112,7 +112,8 @@ export class RoomsService {
       // Re-check: room must still be this room, and the owner still gone
       if (this.rooms.get(room.code) !== room) return;
       const owner = room.participants.get(room.ownerId);
-      if (owner && owner.socketId === null) this.destroy(room.code, 'owner-disconnected');
+      if (owner && owner.socketId === null)
+        this.destroy(room.code, 'owner-disconnected');
     }, this.ownerGraceMs);
   }
 
@@ -121,7 +122,8 @@ export class RoomsService {
     room.inactivityTimer = setTimeout(() => {
       // Re-check: room must still exist and still be empty
       if (this.rooms.get(room.code) !== room) return;
-      if (this.connectedCount(room) === 0) this.destroy(room.code, 'room-inactive');
+      if (this.connectedCount(room) === 0)
+        this.destroy(room.code, 'room-inactive');
     }, this.inactivityMs);
   }
 
@@ -156,7 +158,10 @@ export class RoomsService {
     if (nameError) return { error: nameError };
     if (this.socketIndex.has(socketId)) return { error: 'Already in a room' };
     const identityHash = this.clientIdentityHash(clientIdentity);
-    if (!identityHash) return { error: 'Could not verify this browser. Please refresh and try again.' };
+    if (!identityHash)
+      return {
+        error: 'Could not verify this browser. Please refresh and try again.',
+      };
 
     const code = this.generateUniqueCode();
     const token = this.tokens.generate();
@@ -206,16 +211,24 @@ export class RoomsService {
     if (!room) return { error: NOT_FOUND };
     if (this.socketIndex.has(socketId)) return { error: 'Already in a room' };
     const identityHash = this.clientIdentityHash(clientIdentity);
-    if (!identityHash) return { error: 'Could not verify this browser. Please refresh and try again.' };
+    if (!identityHash)
+      return {
+        error: 'Could not verify this browser. Please refresh and try again.',
+      };
     if (room.blockedParticipants.has(identityHash)) {
-      return { error: 'This browser has been blocked from this room. Ask the owner to unblock you.' };
+      return {
+        error:
+          'This browser has been blocked from this room. Ask the owner to unblock you.',
+      };
     }
     const owner = room.participants.get(room.ownerId);
     if (!owner?.socketId || !room.ownerReady) {
       return { waitingForOwner: true, waitRoom: room.code };
     }
     if (room.participants.size >= MAX_PARTICIPANTS_PER_ROOM) {
-      return { error: 'This room is full. Ask the host to make space and try again.' };
+      return {
+        error: 'This room is full. Ask the host to make space and try again.',
+      };
     }
 
     const token = this.tokens.generate();
@@ -266,10 +279,17 @@ export class RoomsService {
 
   isOwnerReady(code: string) {
     const room = this.findRoom(code);
-    return Boolean(room?.ownerReady && room.participants.get(room.ownerId)?.socketId);
+    return Boolean(
+      room?.ownerReady && room.participants.get(room.ownerId)?.socketId,
+    );
   }
 
-  reconnect(code: string, token: string, socketId: string, clientIdentity: unknown) {
+  reconnect(
+    code: string,
+    token: string,
+    socketId: string,
+    clientIdentity: unknown,
+  ) {
     const room = this.findRoom(code);
     if (!room || typeof token !== 'string') return { error: NOT_FOUND };
     const identityHash = this.clientIdentityHash(clientIdentity);
@@ -284,7 +304,10 @@ export class RoomsService {
       return { error: NOT_FOUND };
     }
     if (room.blockedParticipants.has(identityHash)) {
-      return { error: 'This browser has been blocked from this room. Ask the owner to unblock you.' };
+      return {
+        error:
+          'This browser has been blocked from this room. Ask the owner to unblock you.',
+      };
     }
 
     // If an old connection was still attached, detach it
@@ -372,21 +395,32 @@ export class RoomsService {
     room.blockedParticipants.set(target.clientIdentityHash, blocked);
 
     const disconnectedSocketIds: string[] = [];
-    const stoppedTyping: Array<{ participantId: string; displayName: string }> = [];
+    const stoppedTyping: Array<{ participantId: string; displayName: string }> =
+      [];
     for (const [id, participant] of room.participants) {
-      if (participant.clientIdentityHash !== target.clientIdentityHash) continue;
+      if (participant.clientIdentityHash !== target.clientIdentityHash)
+        continue;
       if (participant.socketId) {
         this.socketIndex.delete(participant.socketId);
         disconnectedSocketIds.push(participant.socketId);
       }
       if (room.typingParticipantIds.delete(id)) {
-        stoppedTyping.push({ participantId: id, displayName: participant.displayName });
+        stoppedTyping.push({
+          participantId: id,
+          displayName: participant.displayName,
+        });
       }
       room.participants.delete(id);
     }
 
     if (this.connectedCount(room) === 0) this.startInactivityTimer(room);
-    return { ok: true, roomCode: room.code, blocked, disconnectedSocketIds, stoppedTyping };
+    return {
+      ok: true,
+      roomCode: room.code,
+      blocked,
+      disconnectedSocketIds,
+      stoppedTyping,
+    };
   }
 
   unblockParticipant(ownerSocketId: string, blockedId: string) {
@@ -465,7 +499,9 @@ export class RoomsService {
 
     const error = validateMessage(body);
     if (error) return { error };
-    const index = room.messages.findIndex((message) => message.id === messageId);
+    const index = room.messages.findIndex(
+      (message) => message.id === messageId,
+    );
     if (index === -1) return { error: 'Message not found' };
     const message = room.messages[index];
     if (message.senderId !== participant.id && !participant.isOwner) {
@@ -483,7 +519,9 @@ export class RoomsService {
     const participant = room && this.findParticipantBySocket(room, socketId);
     if (!room || !participant) return { error: NOT_FOUND };
 
-    const index = room.messages.findIndex((message) => message.id === messageId);
+    const index = room.messages.findIndex(
+      (message) => message.id === messageId,
+    );
     if (index === -1) return { error: 'Message not found' };
     const message = room.messages[index];
     if (message.senderId !== participant.id && !participant.isOwner) {
@@ -554,7 +592,10 @@ export class RoomsService {
     return {
       roomCode: room.code,
       stoppedTyping: stoppedTyping
-        ? { participantId: participant.id, displayName: participant.displayName }
+        ? {
+            participantId: participant.id,
+            displayName: participant.displayName,
+          }
         : null,
     };
   }
