@@ -49,11 +49,7 @@ export class RoomsService {
     return { roomName: room.name };
   }
 
-  getPublicInfo(code: string) {
-  const room = this.rooms.get(code.toUpperCase()); // your in-memory Map
-  if (!room) return null;
-  return { name: room.name.trim().slice(0, 60) };
-}
+  
 
   // The gateway registers this so it can notify and disconnect people on destroy
   setDestroyHandler(fn: (code: string, reason: RoomDestroyReason) => void) {
