@@ -6,8 +6,6 @@ import { RoomsService } from './rooms/rooms.service';
 import { IdentityService } from './identity/identity.service';
 import { TokenService } from './identity/token.service';
 import { RateLimitService } from './security/rate-limit.service';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { join } from 'path';
 
 @Module({
   imports: [
