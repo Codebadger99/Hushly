@@ -6,10 +6,19 @@ import { RoomsService } from './rooms/rooms.service';
 import { IdentityService } from './identity/identity.service';
 import { TokenService } from './identity/token.service';
 import { RateLimitService } from './security/rate-limit.service';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { InviteController } from './invite/invite.controller';
+import { join } from 'path';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true })],
-  controllers: [HealthController],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), '../frontend/dist'),
+      exclude: ['/join/(.*)', '/socket.io/(.*)'],
+    }),
+  ],
+  controllers: [HealthController, InviteController],
   providers: [
     ChatGateway,
     RoomsService,
