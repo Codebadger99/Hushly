@@ -83,35 +83,6 @@ function renderMessageBody(
   return parts;
 }
 
-useEffect(() => {
-  const viewport = window.visualViewport;
-
-  const updateViewportHeight = () => {
-    const height = viewport?.height ?? window.innerHeight;
-
-    document.documentElement.style.setProperty(
-      "--chat-viewport-height",
-      `${height}px`,
-    );
-  };
-
-  updateViewportHeight();
-
-  viewport?.addEventListener("resize", updateViewportHeight);
-  viewport?.addEventListener("scroll", updateViewportHeight);
-  window.addEventListener("resize", updateViewportHeight);
-
-  return () => {
-    viewport?.removeEventListener("resize", updateViewportHeight);
-    viewport?.removeEventListener("scroll", updateViewportHeight);
-    window.removeEventListener("resize", updateViewportHeight);
-
-    document.documentElement.style.removeProperty(
-      "--chat-viewport-height",
-    );
-  };
-}, []);
-
 type ChatRoomPageProps = {
   session: Session;
   messages: Message[];
@@ -251,6 +222,35 @@ export function ChatRoomPage({
     if (!draft && composerRef.current)
       composerRef.current.style.height = "auto";
   }, [draft]);
+
+  useEffect(() => {
+  const viewport = window.visualViewport;
+
+  const updateViewportHeight = () => {
+    const height = viewport?.height ?? window.innerHeight;
+
+    document.documentElement.style.setProperty(
+      "--chat-viewport-height",
+      `${height}px`,
+    );
+  };
+
+  updateViewportHeight();
+
+  viewport?.addEventListener("resize", updateViewportHeight);
+  viewport?.addEventListener("scroll", updateViewportHeight);
+  window.addEventListener("resize", updateViewportHeight);
+
+  return () => {
+    viewport?.removeEventListener("resize", updateViewportHeight);
+    viewport?.removeEventListener("scroll", updateViewportHeight);
+    window.removeEventListener("resize", updateViewportHeight);
+
+    document.documentElement.style.removeProperty(
+      "--chat-viewport-height",
+    );
+  };
+}, []);
 
   function setTyping(isTyping: boolean) {
     if (typingStateRef.current === isTyping) return;
