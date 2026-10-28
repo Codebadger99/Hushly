@@ -631,6 +631,8 @@ function App() {
           ? { name: roomName, clientIdentity }
           : { code: inviteCode.trim(), clientIdentity };
       let ownerReadySignalReceived = false;
+      let joinRequestInFlight = false;
+      let hasJoinedRoom = false;
 
       const cleanupWaitingRoom = () => {
         socket.off("room:owner:ready", handleOwnerReady);
@@ -659,6 +661,7 @@ function App() {
       };
 
       const handleJoinResult = (result: SocketResponse) => {
+        if (hasJoinedRoom) return;
         if (result.waitingForOwner) {
           waitingForOwnerRef.current = true;
           setWaitingForOwner(true);
@@ -669,6 +672,7 @@ function App() {
           }
           return;
         }
+        
         if (
           result.error ||
           !result.roomCode ||
@@ -692,6 +696,7 @@ function App() {
           socketRef.current = null;
           return;
         }
+        hasJoinedRoom = true;
         cleanupWaitingRoom();
         waitingForOwnerRef.current = false;
         setWaitingForOwner(false);
@@ -744,14 +749,37 @@ function App() {
       };
 
       const requestJoin = () => {
-        socket.emit("room:join", payload, handleJoinResult);
+        // Never send another join after success or while one is pending.
+        if (joinRequestInFlight || hasJoinedRoom || !socket.connected) {
+          return;
+        }
+
+        joinRequestInFlight = true;
+
+        socket.emit("room:join", payload, (result: SocketResponse) => {
+          joinRequestInFlight = false;
+          handleJoinResult(result);
+        });
       };
+
       const handleOwnerReady = () => {
-        if (waitingForOwnerRef.current) requestJoin();
-        else ownerReadySignalReceived = true;
+        if (hasJoinedRoom) return;
+
+        if (waitingForOwnerRef.current) {
+          requestJoin();
+        } else {
+          ownerReadySignalReceived = true;
+        }
       };
+
       const handleWaitingReconnect = () => {
-        if (waitingForOwnerRef.current) requestJoin();
+        if (hasJoinedRoom || !waitingForOwnerRef.current) return;
+         
+
+        // A new socket connection can invalidate an in-flight request
+        // associated with the previous connection.
+        // joinRequestInFlight = false;
+        requestJoin();
       };
 
       if (mode === "join") {
