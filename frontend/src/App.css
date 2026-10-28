@@ -3387,3 +3387,53 @@ textarea:focus-visible {
     max-width: min(38%, 480px);
   }
 }
+
+
+/* Mobile chat viewport and keyboard layout */
+.chat-shell {
+  position: fixed;
+  inset: 0 0 auto;
+  width: 100%;
+  height: var(--chat-viewport-height, 100dvh);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.chat-shell .chat-header {
+  flex: 0 0 auto;
+}
+
+.chat-shell .chat-alert-stack {
+  pointer-events: none;
+}
+
+.chat-shell .conversation {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-shell .composer-area {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+}
+
+.chat-shell .composer {
+  min-width: 0;
+}
+
+.chat-shell .composer textarea {
+  min-width: 0;
+  max-height: 144px;
+  overflow-y: auto;
+}
+
